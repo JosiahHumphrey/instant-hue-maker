@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2 } from "lucide-react";
+import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -25,6 +25,8 @@ interface CanvasState {
   backgroundColor?: string;
   fadeEndpoint?: number;
 }
+
+type DitherMode = "none" | "floyd-steinberg" | "bayer-2x2" | "bayer-4x4" | "bayer-8x8" | "atkinson";
 
 const COLOR_PALETTES = {
   // Original Favorites
@@ -288,6 +290,12 @@ export const GradientCanvas = () => {
   const [backgroundColor, setBackgroundColor] = useState("#ffffff");
   const [fadeEndpoint, setFadeEndpoint] = useState(1.0);
   
+  // Image & Dither settings
+  const [uploadedImage, setUploadedImage] = useState<HTMLImageElement | null>(null);
+  const [ditherMode, setDitherMode] = useState<DitherMode>("none");
+  const [ditherIntensity, setDitherIntensity] = useState(128);
+  const [imageOpacity, setImageOpacity] = useState(100);
+  
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -409,6 +417,161 @@ export const GradientCanvas = () => {
     ctx.globalAlpha = previousAlpha;
   }, [noiseDensity, noiseOpacity, noiseSharpness]);
 
+  // Dithering algorithms
+  const applyDither = useCallback((imageData: ImageData, mode: DitherMode, threshold: number): ImageData => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const width = imageData.width;
+    const height = imageData.height;
+
+    if (mode === "none") {
+      return new ImageData(data, width, height);
+    }
+
+    // Bayer matrices
+    const bayer2x2 = [
+      [0, 2],
+      [3, 1]
+    ];
+
+    const bayer4x4 = [
+      [0, 8, 2, 10],
+      [12, 4, 14, 6],
+      [3, 11, 1, 9],
+      [15, 7, 13, 5]
+    ];
+
+    const bayer8x8 = [
+      [0, 32, 8, 40, 2, 34, 10, 42],
+      [48, 16, 56, 24, 50, 18, 58, 26],
+      [12, 44, 4, 36, 14, 46, 6, 38],
+      [60, 28, 52, 20, 62, 30, 54, 22],
+      [3, 35, 11, 43, 1, 33, 9, 41],
+      [51, 19, 59, 27, 49, 17, 57, 25],
+      [15, 47, 7, 39, 13, 45, 5, 37],
+      [63, 31, 55, 23, 61, 29, 53, 21]
+    ];
+
+    const getPixelIndex = (x: number, y: number) => (y * width + x) * 4;
+
+    if (mode === "floyd-steinberg") {
+      // Floyd-Steinberg dithering
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = getPixelIndex(x, y);
+          
+          // Convert to grayscale
+          const oldPixel = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+          const newPixel = oldPixel < threshold ? 0 : 255;
+          const error = oldPixel - newPixel;
+
+          data[idx] = data[idx + 1] = data[idx + 2] = newPixel;
+
+          // Distribute error to neighboring pixels
+          if (x + 1 < width) {
+            const rightIdx = getPixelIndex(x + 1, y);
+            data[rightIdx] = Math.min(255, Math.max(0, data[rightIdx] + error * 7 / 16));
+            data[rightIdx + 1] = Math.min(255, Math.max(0, data[rightIdx + 1] + error * 7 / 16));
+            data[rightIdx + 2] = Math.min(255, Math.max(0, data[rightIdx + 2] + error * 7 / 16));
+          }
+          if (x - 1 >= 0 && y + 1 < height) {
+            const bottomLeftIdx = getPixelIndex(x - 1, y + 1);
+            data[bottomLeftIdx] = Math.min(255, Math.max(0, data[bottomLeftIdx] + error * 3 / 16));
+            data[bottomLeftIdx + 1] = Math.min(255, Math.max(0, data[bottomLeftIdx + 1] + error * 3 / 16));
+            data[bottomLeftIdx + 2] = Math.min(255, Math.max(0, data[bottomLeftIdx + 2] + error * 3 / 16));
+          }
+          if (y + 1 < height) {
+            const bottomIdx = getPixelIndex(x, y + 1);
+            data[bottomIdx] = Math.min(255, Math.max(0, data[bottomIdx] + error * 5 / 16));
+            data[bottomIdx + 1] = Math.min(255, Math.max(0, data[bottomIdx + 1] + error * 5 / 16));
+            data[bottomIdx + 2] = Math.min(255, Math.max(0, data[bottomIdx + 2] + error * 5 / 16));
+          }
+          if (x + 1 < width && y + 1 < height) {
+            const bottomRightIdx = getPixelIndex(x + 1, y + 1);
+            data[bottomRightIdx] = Math.min(255, Math.max(0, data[bottomRightIdx] + error * 1 / 16));
+            data[bottomRightIdx + 1] = Math.min(255, Math.max(0, data[bottomRightIdx + 1] + error * 1 / 16));
+            data[bottomRightIdx + 2] = Math.min(255, Math.max(0, data[bottomRightIdx + 2] + error * 1 / 16));
+          }
+        }
+      }
+    } else if (mode === "atkinson") {
+      // Atkinson dithering (similar to Floyd-Steinberg but different error distribution)
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = getPixelIndex(x, y);
+          const oldPixel = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+          const newPixel = oldPixel < threshold ? 0 : 255;
+          const error = (oldPixel - newPixel) / 8;
+
+          data[idx] = data[idx + 1] = data[idx + 2] = newPixel;
+
+          // Atkinson error distribution
+          const distribute = (dx: number, dy: number) => {
+            if (x + dx >= 0 && x + dx < width && y + dy >= 0 && y + dy < height) {
+              const targetIdx = getPixelIndex(x + dx, y + dy);
+              data[targetIdx] = Math.min(255, Math.max(0, data[targetIdx] + error));
+              data[targetIdx + 1] = Math.min(255, Math.max(0, data[targetIdx + 1] + error));
+              data[targetIdx + 2] = Math.min(255, Math.max(0, data[targetIdx + 2] + error));
+            }
+          };
+
+          distribute(1, 0);
+          distribute(2, 0);
+          distribute(-1, 1);
+          distribute(0, 1);
+          distribute(1, 1);
+          distribute(0, 2);
+        }
+      }
+    } else {
+      // Bayer matrix dithering
+      let matrix = bayer2x2;
+      let matrixSize = 2;
+      let divisor = 4;
+
+      if (mode === "bayer-4x4") {
+        matrix = bayer4x4;
+        matrixSize = 4;
+        divisor = 16;
+      } else if (mode === "bayer-8x8") {
+        matrix = bayer8x8;
+        matrixSize = 8;
+        divisor = 64;
+      }
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = getPixelIndex(x, y);
+          const grayscale = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+          
+          const bayerValue = matrix[y % matrixSize][x % matrixSize];
+          const adjustedThreshold = threshold + (bayerValue / divisor - 0.5) * 255;
+          
+          const newValue = grayscale < adjustedThreshold ? 0 : 255;
+          data[idx] = data[idx + 1] = data[idx + 2] = newValue;
+        }
+      }
+    }
+
+    return new ImageData(data, width, height);
+  }, []);
+
+  // Handle image upload
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        setUploadedImage(img);
+        toast.success("Image uploaded!");
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
   // Draw gradient on canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -423,6 +586,32 @@ export const GradientCanvas = () => {
     // Clear canvas with background color
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw uploaded image with dithering if present
+    if (uploadedImage) {
+      // Create temporary canvas for image processing
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (tempCtx) {
+        // Draw image to fit canvas
+        tempCtx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+        
+        // Apply dithering
+        if (ditherMode !== "none") {
+          const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+          const dithered = applyDither(imageData, ditherMode, ditherIntensity);
+          tempCtx.putImageData(dithered, 0, 0);
+        }
+        
+        // Draw to main canvas with opacity
+        ctx.globalAlpha = imageOpacity / 100;
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.globalAlpha = 1;
+      }
+    }
 
     // Set blend mode
     ctx.globalCompositeOperation = blendMode;
@@ -454,7 +643,7 @@ export const GradientCanvas = () => {
     if (noiseEnabled) {
       generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint]);
+  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, applyDither]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -960,6 +1149,105 @@ export const GradientCanvas = () => {
             </div>
           )}
         </div>
+
+        <div className="space-y-4 pt-4 border-t border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">Image & Dither</h3>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Upload Image
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+                id="image-upload"
+              />
+              <label htmlFor="image-upload" className="flex-1">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  asChild
+                >
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadedImage ? "Change Image" : "Upload Image"}
+                  </span>
+                </Button>
+              </label>
+              {uploadedImage && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setUploadedImage(null);
+                    toast.success("Image removed");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {uploadedImage && (
+            <>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2">
+                  Dither Effect
+                </label>
+                <Select value={ditherMode} onValueChange={(value) => setDitherMode(value as DitherMode)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="floyd-steinberg">Floyd-Steinberg</SelectItem>
+                    <SelectItem value="atkinson">Atkinson</SelectItem>
+                    <SelectItem value="bayer-2x2">Bayer 2×2</SelectItem>
+                    <SelectItem value="bayer-4x4">Bayer 4×4</SelectItem>
+                    <SelectItem value="bayer-8x8">Bayer 8×8</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {ditherMode !== "none" && (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Dither Threshold: {ditherIntensity}
+                  </label>
+                  <Slider
+                    value={[ditherIntensity]}
+                    onValueChange={(v) => setDitherIntensity(v[0])}
+                    min={0}
+                    max={255}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2">
+                  Image Opacity: {imageOpacity}%
+                </label>
+                <Slider
+                  value={[imageOpacity]}
+                  onValueChange={(v) => setImageOpacity(v[0])}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main Canvas Area */}
@@ -1079,6 +1367,7 @@ export const GradientCanvas = () => {
           <p>🎨 Try different blend modes</p>
           <p>⌨️ Ctrl+Z to undo, Ctrl+Y to redo</p>
           <p>🎲 Randomize positions for variety</p>
+          <p>🖼️ Upload images for dither effects</p>
         </div>
       </div>
     </div>
