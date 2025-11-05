@@ -27,6 +27,7 @@ interface CanvasState {
 }
 
 const COLOR_PALETTES = {
+  // Original Favorites
   "Lavender Mist": ["#ffc2d1", "#ffd4e5", "#a78bfa", "#60a5fa", "#f472b6"],
   "Sunset Blaze": ["#ff6b6b", "#ff8e53", "#ffd93d", "#fcbf49", "#f77f00"],
   "Ocean Depths": ["#0077b6", "#00b4d8", "#90e0ef", "#caf0f8", "#48cae4"],
@@ -35,6 +36,163 @@ const COLOR_PALETTES = {
   "Warm Autumn": ["#d4a373", "#bc6c25", "#dda15e", "#fefae0", "#faedcd"],
   "Cool Mint": ["#06ffa5", "#00d9ff", "#5eead4", "#99f6e4", "#2dd4bf"],
   "Cosmic Night": ["#1e1b4b", "#4c1d95", "#7c3aed", "#a78bfa", "#c4b5fd"],
+  
+  // Nature & Earth
+  "Desert Sand": ["#e4a672", "#f4e1d2", "#bc6c25", "#dda15e", "#fefae0"],
+  "Tropical Paradise": ["#06d6a0", "#118ab2", "#073b4c", "#ffd166", "#ef476f"],
+  "Mountain Mist": ["#778da9", "#9db4c0", "#c2dfe3", "#e0fbfc", "#5e6472"],
+  "Cherry Blossom": ["#ffb3c6", "#ff8fab", "#fb6f92", "#c9184a", "#ffc2d1"],
+  "Emerald Forest": ["#1b4332", "#2d6a4f", "#52b788", "#95d5b2", "#d8f3dc"],
+  "Coral Reef": ["#ff6b9d", "#fec5bb", "#fcd5ce", "#f8edeb", "#e8e8e4"],
+  "Golden Hour": ["#f4a261", "#e76f51", "#e9c46a", "#2a9d8f", "#264653"],
+  "Arctic Ice": ["#d0e1f9", "#9fc3e8", "#7ab8e8", "#4d9de0", "#3685b5"],
+  "Jungle Canopy": ["#1a4d2e", "#2e7d32", "#4caf50", "#81c784", "#a5d6a7"],
+  "Autumn Leaves": ["#8b0000", "#d2691e", "#ff8c00", "#ffd700", "#daa520"],
+  
+  // Sky & Weather
+  "Stormy Clouds": ["#36454f", "#4a5568", "#718096", "#a0aec0", "#cbd5e0"],
+  "Clear Sky": ["#87ceeb", "#4a90e2", "#0077be", "#006ba6", "#003f5c"],
+  "Sunrise Glow": ["#ff6b35", "#f7931e", "#fdc500", "#ffe74c", "#fff275"],
+  "Twilight Hour": ["#4a148c", "#6a1b9a", "#8e24aa", "#9c27b0", "#ab47bc"],
+  "Northern Lights": ["#00ff87", "#60efff", "#a78bfa", "#f72585", "#4cc9f0"],
+  "Rainy Day": ["#546e7a", "#607d8b", "#78909c", "#90a4ae", "#b0bec5"],
+  "Moonlight": ["#191970", "#2e3192", "#483d8b", "#6a5acd", "#7b68ee"],
+  "Cotton Candy": ["#ffafcc", "#ffc8dd", "#cdb4db", "#bde0fe", "#a2d2ff"],
+  
+  // Seasons
+  "Spring Meadow": ["#90ee90", "#98fb98", "#7cfc00", "#adff2f", "#9acd32"],
+  "Summer Breeze": ["#ffeb3b", "#ffc107", "#ff9800", "#00bcd4", "#4dd0e1"],
+  "Fall Harvest": ["#8b4513", "#a0522d", "#d2691e", "#cd853f", "#daa520"],
+  "Winter Frost": ["#e0f2f7", "#b2ebf2", "#80deea", "#4dd0e1", "#26c6da"],
+  
+  // Moods & Emotions
+  "Romantic Blush": ["#ff69b4", "#ff1493", "#db7093", "#c71585", "#ffc0cb"],
+  "Peaceful Zen": ["#d4e7c5", "#bfd8bd", "#99c1b2", "#8e9aaf", "#cbc5ea"],
+  "Energetic Burst": ["#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff"],
+  "Melancholic Blue": ["#03045e", "#023e8a", "#0077b6", "#0096c7", "#00b4d8"],
+  "Joyful Bright": ["#ffbe0b", "#fb5607", "#ff006e", "#8338ec", "#3a86ff"],
+  "Calm Waters": ["#caf0f8", "#90e0ef", "#00b4d8", "#0077b6", "#03045e"],
+  "Warm Embrace": ["#f4978e", "#f8ad9d", "#fbc4ab", "#ffdab9", "#ffe5d9"],
+  "Cool Refresh": ["#06ffa5", "#06d6a0", "#00a8cc", "#0091ad", "#006d77"],
+  
+  // Food & Drink
+  "Strawberry Cream": ["#ff6b9d", "#ff8fab", "#ffb3c6", "#ffc2d1", "#ffd4e5"],
+  "Mint Chocolate": ["#3d2e1f", "#654321", "#06ffa5", "#00d9ff", "#5eead4"],
+  "Peach Sorbet": ["#ffb347", "#ffa07a", "#ff8c69", "#ff7f50", "#ff6347"],
+  "Blueberry Jam": ["#191970", "#4169e1", "#6495ed", "#87ceeb", "#b0c4de"],
+  "Lemon Drop": ["#fff44f", "#ffed4e", "#ffea00", "#fdd835", "#fbc02d"],
+  "Grape Crush": ["#4b0082", "#6a0dad", "#8a2be2", "#9370db", "#ba55d3"],
+  "Orange Juice": ["#ff8c00", "#ffa500", "#ffb347", "#ffc478", "#ffd699"],
+  "Raspberry Swirl": ["#e30b5d", "#ff006e", "#ff1493", "#ff69b4", "#ffb6c1"],
+  
+  // Gemstones & Minerals
+  "Ruby Red": ["#9b111e", "#e0115f", "#ff0033", "#ff033e", "#ff1744"],
+  "Sapphire Blue": ["#0f52ba", "#0067a5", "#007ba7", "#0e86d4", "#4a9eff"],
+  "Emerald Green": ["#046307", "#0c7c59", "#50c878", "#5edc94", "#90ee90"],
+  "Amethyst Purple": ["#9966cc", "#a37ab5", "#b19cd9", "#c5b4e3", "#d8bfd8"],
+  "Topaz Gold": ["#ffb347", "#ffc04d", "#ffd700", "#ffe135", "#ffed4e"],
+  "Turquoise Dream": ["#30d5c8", "#40e0d0", "#48d1cc", "#7fffd4", "#afeeee"],
+  "Rose Quartz": ["#f4c2c2", "#ffc0cb", "#ffb6c1", "#ffaac0", "#ff9ebf"],
+  "Onyx Black": ["#0f0f0f", "#1a1a1a", "#2d2d2d", "#404040", "#595959"],
+  
+  // Art Movements
+  "Impressionist": ["#9bc1bc", "#5ca4a9", "#e6ebe0", "#f0b67f", "#fe5f55"],
+  "Pop Art": ["#ff006e", "#00f5ff", "#ffbe0b", "#fb5607", "#8338ec"],
+  "Art Deco": ["#1a1a1d", "#c3073f", "#950740", "#6f2232", "#4e4e50"],
+  "Abstract Express": ["#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff"],
+  "Minimalist": ["#ffffff", "#f5f5f5", "#e0e0e0", "#bdbdbd", "#9e9e9e"],
+  "Surrealist": ["#ff006e", "#8338ec", "#3a86ff", "#06ffa5", "#ffbe0b"],
+  "Renaissance": ["#8b4513", "#cd853f", "#daa520", "#b8860b", "#8b7355"],
+  
+  // Time of Day
+  "Dawn Breaking": ["#ff6b35", "#f7931e", "#fdc500", "#ffe74c", "#fff8dc"],
+  "High Noon": ["#ffeb3b", "#ffc107", "#ff9800", "#87ceeb", "#4a90e2"],
+  "Dusk Falling": ["#ff4e50", "#fc913a", "#f9d423", "#e05e6f", "#c94e50"],
+  "Midnight Hour": ["#000080", "#191970", "#0c0c44", "#0e0e2c", "#1a1a3e"],
+  "Blue Hour": ["#1e3a8a", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd"],
+  "Golden Afternoon": ["#fbbf24", "#f59e0b", "#d97706", "#b45309", "#92400e"],
+  
+  // Geographic & Cultural
+  "Sahara Desert": ["#c19a6b", "#d2b48c", "#deb887", "#f5deb3", "#ffe4b5"],
+  "Amazon Rainforest": ["#013220", "#006400", "#228b22", "#32cd32", "#90ee90"],
+  "Arctic Tundra": ["#e0f2f7", "#b2ebf2", "#80deea", "#ffffff", "#f0f8ff"],
+  "Mediterranean": ["#0077be", "#1e90ff", "#00ced1", "#f0e68c", "#ff6347"],
+  "Asian Spice": ["#ff0000", "#ffa500", "#ffd700", "#8b0000", "#ff4500"],
+  "Caribbean Splash": ["#00ced1", "#40e0d0", "#48d1cc", "#afeeee", "#7fffd4"],
+  "Nordic Cool": ["#2d4059", "#ea5455", "#f07b3f", "#ffd460", "#ffffff"],
+  "African Sunset": ["#ff6b35", "#f7931e", "#fdc500", "#8b4513", "#d2691e"],
+  
+  // Abstract & Conceptual
+  "Neon Nights": ["#ff006e", "#fb5607", "#ffbe0b", "#00f5ff", "#8338ec"],
+  "Cyberpunk": ["#ff006e", "#00f5ff", "#8338ec", "#3a0ca3", "#4cc9f0"],
+  "Vaporwave": ["#ff71ce", "#01cdfe", "#05ffa1", "#b967ff", "#fffb96"],
+  "Retro Gaming": ["#ff6b35", "#f7931e", "#00d9ff", "#8338ec", "#fb5607"],
+  "Steampunk": ["#8b4513", "#cd853f", "#daa520", "#b8860b", "#666666"],
+  "Pastel Dream": ["#ffcccb", "#ffb3ba", "#bae1ff", "#ffffba", "#baffc9"],
+  "Monochrome": ["#000000", "#404040", "#808080", "#c0c0c0", "#ffffff"],
+  "Iridescent": ["#ff006e", "#fb5607", "#ffbe0b", "#00f5ff", "#8338ec"],
+  
+  // Brand Inspired
+  "Tech Blue": ["#0066cc", "#0080ff", "#0099ff", "#00b3ff", "#00ccff"],
+  "Corporate Gray": ["#2c3e50", "#34495e", "#7f8c8d", "#95a5a6", "#bdc3c7"],
+  "Startup Energy": ["#ff006e", "#fb5607", "#ffbe0b", "#8338ec", "#3a86ff"],
+  "Luxury Gold": ["#ffd700", "#ffdf00", "#ffed4e", "#fff44f", "#fff9c4"],
+  "Eco Green": ["#2e7d32", "#388e3c", "#43a047", "#4caf50", "#66bb6a"],
+  
+  // Florals
+  "Rose Garden": ["#ff1744", "#ff5252", "#ff6e7f", "#ff8a9b", "#ffa8b8"],
+  "Lavender Field": ["#967bb6", "#b695c0", "#c8a2c8", "#dda0dd", "#e6e6fa"],
+  "Sunflower": ["#ffb700", "#ffc300", "#ffd000", "#ffdd00", "#ffea00"],
+  "Orchid Bloom": ["#da70d6", "#dda0dd", "#ee82ee", "#ff00ff", "#ff1493"],
+  "Tulip Festival": ["#ff1744", "#ff6e40", "#ffab40", "#ffea00", "#ff5252"],
+  "Jasmine White": ["#fffff0", "#fffafa", "#faf0e6", "#faebd7", "#f5f5dc"],
+  
+  // Metals & Metallics
+  "Silver Shine": ["#c0c0c0", "#d3d3d3", "#dcdcdc", "#e8e8e8", "#f5f5f5"],
+  "Bronze Age": ["#cd7f32", "#d2942b", "#daa520", "#e0a342", "#ecb159"],
+  "Copper Glow": ["#b87333", "#c27c53", "#cc8866", "#d4957d", "#dda394"],
+  "Platinum Luxury": ["#e5e4e2", "#eaeaea", "#f0f0f0", "#f5f5f5", "#fafafa"],
+  "Iron Gray": ["#545454", "#696969", "#7d7d7d", "#919191", "#a6a6a6"],
+  
+  // Candy & Sweets
+  "Bubblegum Pink": ["#ff69b4", "#ff85c1", "#ffa0ce", "#ffb8db", "#ffd0e8"],
+  "Candy Apple": ["#ff0800", "#ff1744", "#ff5252", "#ff6b6b", "#ff8282"],
+  "Cotton Candy Sky": ["#ffb3d9", "#ffc2e0", "#ffd1e8", "#ffe0f0", "#fff0f8"],
+  "Jelly Bean": ["#ff006e", "#fb5607", "#ffbe0b", "#00f5ff", "#8338ec"],
+  "Licorice Mix": ["#000000", "#1a1a1a", "#4b0082", "#8a2be2", "#9370db"],
+  
+  // Sports & Teams
+  "Athletic Red": ["#c8102e", "#dc143c", "#e21b3c", "#ff1744", "#ff4569"],
+  "Team Blue": ["#0051ba", "#0066cc", "#007acc", "#1e90ff", "#4a9eff"],
+  "Victory Gold": ["#ffc72c", "#ffd700", "#ffe135", "#ffed4e", "#fff44f"],
+  "Championship": ["#000000", "#ffd700", "#c0c0c0", "#cd7f32", "#ffffff"],
+  
+  // Elements
+  "Fire": ["#ff0000", "#ff4500", "#ff6347", "#ff7f50", "#ffa500"],
+  "Water": ["#0077be", "#00a8cc", "#00b4d8", "#48cae4", "#90e0ef"],
+  "Earth": ["#8b4513", "#a0522d", "#cd853f", "#d2691e", "#daa520"],
+  "Air": ["#87ceeb", "#add8e6", "#b0e0e6", "#e0f6ff", "#f0f8ff"],
+  "Lightning": ["#ffff00", "#ffed4e", "#fff44f", "#fffacd", "#ffffff"],
+  
+  // Mythical & Fantasy
+  "Dragon Fire": ["#8b0000", "#dc143c", "#ff4500", "#ff6347", "#ffa500"],
+  "Unicorn Magic": ["#ff69b4", "#dda0dd", "#9370db", "#ba55d3", "#ffffff"],
+  "Mermaid Scales": ["#00ced1", "#40e0d0", "#48d1cc", "#7fffd4", "#afeeee"],
+  "Phoenix Flame": ["#ff0000", "#ff4500", "#ff8c00", "#ffa500", "#ffd700"],
+  "Fairy Dust": ["#ffb3d9", "#dda0dd", "#9370db", "#00ced1", "#fffacd"],
+  
+  // Cinema & Film
+  "Film Noir": ["#000000", "#1a1a1a", "#2d2d2d", "#404040", "#808080"],
+  "Technicolor": ["#ff006e", "#fb5607", "#ffbe0b", "#00f5ff", "#8338ec"],
+  "Sepia Tone": ["#704214", "#8b6914", "#a0825c", "#b8977a", "#d2b48c"],
+  "Hollywood Gold": ["#ffd700", "#ffe135", "#ffed4e", "#fff44f", "#fffacd"],
+  
+  // Music Genres
+  "Jazz Blues": ["#191970", "#4169e1", "#6495ed", "#b0c4de", "#f0e68c"],
+  "Rock & Roll": ["#000000", "#8b0000", "#dc143c", "#ff0000", "#ff4500"],
+  "Classical": ["#2e2e2e", "#4a4a4a", "#696969", "#8b8b8b", "#d3d3d3"],
+  "Electronic": ["#00f5ff", "#00d9ff", "#8338ec", "#ff006e", "#ffbe0b"],
+  "Reggae Vibes": ["#006400", "#ffd700", "#ff0000", "#ffa500", "#228b22"],
 };
 
 const CANVAS_PRESETS = [
