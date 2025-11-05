@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize } from "lucide-react";
+import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize, Save, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -27,6 +27,23 @@ interface CanvasState {
 }
 
 type DitherMode = "none" | "floyd-steinberg" | "bayer-2x2" | "bayer-4x4" | "bayer-8x8" | "atkinson";
+
+interface SavedPreset {
+  name: string;
+  points: GradientPoint[];
+  blur: number;
+  gradientSpread: number;
+  backgroundColor: string;
+  fadeEndpoint: number;
+  blendMode: GlobalCompositeOperation;
+  noiseEnabled: boolean;
+  noiseOpacity: number;
+  noiseDensity: number;
+  noiseSharpness: number;
+  ditherMode: DitherMode;
+  ditherIntensity: number;
+  imageOpacity: number;
+}
 
 const COLOR_PALETTES = {
   // Original Favorites
@@ -299,9 +316,66 @@ export const GradientCanvas = () => {
   // Zoom state
   const [zoom, setZoom] = useState(100);
   
+  // Saved presets
+  const [savedPresets, setSavedPresets] = useState<SavedPreset[]>([]);
+  
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Load state from localStorage on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('gradientCanvasState');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.points) setPoints(parsed.points);
+        if (parsed.blur !== undefined) setBlur(parsed.blur);
+        if (parsed.gradientSpread !== undefined) setGradientSpread(parsed.gradientSpread);
+        if (parsed.backgroundColor) setBackgroundColor(parsed.backgroundColor);
+        if (parsed.fadeEndpoint !== undefined) setFadeEndpoint(parsed.fadeEndpoint);
+        if (parsed.blendMode) setBlendMode(parsed.blendMode);
+        if (parsed.noiseEnabled !== undefined) setNoiseEnabled(parsed.noiseEnabled);
+        if (parsed.noiseOpacity !== undefined) setNoiseOpacity(parsed.noiseOpacity);
+        if (parsed.noiseDensity !== undefined) setNoiseDensity(parsed.noiseDensity);
+        if (parsed.noiseSharpness !== undefined) setNoiseSharpness(parsed.noiseSharpness);
+        toast.success("Previous session restored!");
+      } catch (e) {
+        console.error("Failed to load saved state", e);
+      }
+    }
+
+    const savedPresetsData = localStorage.getItem('gradientCanvasPresets');
+    if (savedPresetsData) {
+      try {
+        setSavedPresets(JSON.parse(savedPresetsData));
+      } catch (e) {
+        console.error("Failed to load saved presets", e);
+      }
+    }
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    const stateToSave = {
+      points,
+      blur,
+      gradientSpread,
+      backgroundColor,
+      fadeEndpoint,
+      blendMode,
+      noiseEnabled,
+      noiseOpacity,
+      noiseDensity,
+      noiseSharpness,
+    };
+    localStorage.setItem('gradientCanvasState', JSON.stringify(stateToSave));
+  }, [points, blur, gradientSpread, backgroundColor, fadeEndpoint, blendMode, noiseEnabled, noiseOpacity, noiseDensity, noiseSharpness]);
+
+  // Save presets to localStorage
+  useEffect(() => {
+    localStorage.setItem('gradientCanvasPresets', JSON.stringify(savedPresets));
+  }, [savedPresets]);
 
   // Save state to history
   const saveToHistory = useCallback((
@@ -851,6 +925,90 @@ export const GradientCanvas = () => {
     toast.success("Positions randomized!");
   };
 
+  const saveCurrentPreset = () => {
+    const presetName = prompt("Enter a name for this preset:");
+    if (!presetName) return;
+
+    const preset: SavedPreset = {
+      name: presetName,
+      points,
+      blur,
+      gradientSpread,
+      backgroundColor,
+      fadeEndpoint,
+      blendMode,
+      noiseEnabled,
+      noiseOpacity,
+      noiseDensity,
+      noiseSharpness,
+      ditherMode,
+      ditherIntensity,
+      imageOpacity,
+    };
+
+    setSavedPresets([...savedPresets, preset]);
+    toast.success(`Preset "${presetName}" saved!`);
+  };
+
+  const loadPreset = (preset: SavedPreset) => {
+    setPoints(preset.points);
+    setBlur(preset.blur);
+    setGradientSpread(preset.gradientSpread);
+    setBackgroundColor(preset.backgroundColor);
+    setFadeEndpoint(preset.fadeEndpoint);
+    setBlendMode(preset.blendMode);
+    setNoiseEnabled(preset.noiseEnabled);
+    setNoiseOpacity(preset.noiseOpacity);
+    setNoiseDensity(preset.noiseDensity);
+    setNoiseSharpness(preset.noiseSharpness);
+    setDitherMode(preset.ditherMode);
+    setDitherIntensity(preset.ditherIntensity);
+    setImageOpacity(preset.imageOpacity);
+    saveToHistory(preset.points, preset.blur);
+    toast.success(`Loaded preset "${preset.name}"`);
+  };
+
+  const deletePreset = (index: number) => {
+    const newPresets = savedPresets.filter((_, i) => i !== index);
+    setSavedPresets(newPresets);
+    toast.success("Preset deleted");
+  };
+
+  const exportPresetToFile = (preset: SavedPreset) => {
+    const dataStr = JSON.stringify(preset, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${preset.name.replace(/\s+/g, '_')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Preset exported!");
+  };
+
+  const importPresetFromFile = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const preset = JSON.parse(event.target?.result as string) as SavedPreset;
+          setSavedPresets([...savedPresets, preset]);
+          toast.success(`Imported preset "${preset.name}"`);
+        } catch (error) {
+          toast.error("Failed to import preset");
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   const exportCanvas = async (format: "png" | "svg") => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -959,8 +1117,16 @@ export const GradientCanvas = () => {
           </Button>
         </div>
 
-        {/* Export */}
+        {/* Export & Presets */}
         <div className="flex items-center gap-2">
+          <Button onClick={saveCurrentPreset} variant="outline" size="sm">
+            <Save className="h-4 w-4 mr-2" />
+            Save Preset
+          </Button>
+          <Button onClick={importPresetFromFile} variant="outline" size="sm">
+            <FolderOpen className="h-4 w-4 mr-2" />
+            Import
+          </Button>
           <Button onClick={() => exportCanvas("png")} variant="default" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Export PNG
@@ -973,11 +1139,54 @@ export const GradientCanvas = () => {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar - Scrollable */}
-        <div className="w-72 bg-card border-r border-border overflow-y-auto">
-          <div className="p-4 space-y-6">
-            {/* Color Palette */}
-            <div>
+        {/* Left Sidebar - Fixed height, scrollable content */}
+        <div className="w-72 bg-card border-r border-border flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-6">
+              {/* Saved Presets */}
+              {savedPresets.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
+                    Saved Presets
+                  </h2>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                    {savedPresets.map((preset, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 p-2 rounded-lg border border-border hover:border-primary/50 group"
+                      >
+                        <Button
+                          variant="ghost"
+                          className="flex-1 justify-start text-xs"
+                          onClick={() => loadPreset(preset)}
+                        >
+                          {preset.name}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                          onClick={() => exportPresetToFile(preset)}
+                          title="Export to file"
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => deletePreset(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Color Palette */}
+              <div>
               <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
                 <Palette className="h-4 w-4" />
                 Color Palette
@@ -1200,15 +1409,16 @@ export const GradientCanvas = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Scrollable */}
-        <div className="w-72 bg-card border-l border-border overflow-y-auto">
-          <div className="p-4 space-y-6">
-            {/* Canvas Size */}
-            <div>
-              <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-                Canvas Size
-              </h2>
-              <div className="grid grid-cols-3 gap-2">
+        {/* Right Sidebar - Fixed height, scrollable content */}
+        <div className="w-72 bg-card border-l border-border flex flex-col">
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 space-y-6">
+              {/* Canvas Size */}
+              <div>
+                <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
+                  Canvas Size
+                </h2>
+                <div className="grid grid-cols-3 gap-2">
                 {CANVAS_PRESETS.map((preset) => (
                   <Button
                     key={preset.name}
@@ -1251,13 +1461,13 @@ export const GradientCanvas = () => {
                   />
                 </div>
               </div>
-            </div>
+              </div>
 
-            {/* Effects */}
-            <div className="pt-4 border-t border-border">
-              <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Effects</h2>
-              
-              <div className="space-y-4">
+              {/* Effects */}
+              <div className="pt-4 border-t border-border">
+                <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Effects</h2>
+                
+                <div className="space-y-4">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-2">
                     Blur: {blur}px
