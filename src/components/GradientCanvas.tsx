@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon } from "lucide-react";
+import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -295,6 +295,9 @@ export const GradientCanvas = () => {
   const [ditherMode, setDitherMode] = useState<DitherMode>("none");
   const [ditherIntensity, setDitherIntensity] = useState(128);
   const [imageOpacity, setImageOpacity] = useState(100);
+  
+  // Zoom state
+  const [zoom, setZoom] = useState(100);
   
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
@@ -900,20 +903,17 @@ export const GradientCanvas = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
-      {/* Left Sidebar */}
-      <div className="w-64 bg-card border-r border-border p-6 space-y-6 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Gradient Canvas
-          </h2>
-          <div className="flex gap-1">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Top Toolbar */}
+      <div className="h-14 bg-card border-b border-border flex items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">Gradient Canvas</h1>
+          <div className="flex items-center gap-1 ml-4">
             <Button
               variant="ghost"
               size="icon"
               onClick={undo}
               disabled={historyIndex <= 0}
-              className="h-8 w-8"
               title="Undo (Ctrl+Z)"
             >
               <Undo2 className="h-4 w-4" />
@@ -923,7 +923,6 @@ export const GradientCanvas = () => {
               size="icon"
               onClick={redo}
               disabled={historyIndex >= history.length - 1}
-              className="h-8 w-8"
               title="Redo (Ctrl+Y)"
             >
               <Redo2 className="h-4 w-4" />
@@ -931,488 +930,512 @@ export const GradientCanvas = () => {
           </div>
         </div>
 
-        <div>
-          <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
-            <Palette className="h-4 w-4" />
-            Color Palette
-          </label>
-          <Select onValueChange={applyPalette}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose preset..." />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.keys(COLOR_PALETTES).map((paletteName) => (
-                <SelectItem key={paletteName} value={paletteName}>
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-0.5">
-                      {COLOR_PALETTES[paletteName as keyof typeof COLOR_PALETTES]
-                        .slice(0, 5)
-                        .map((color, i) => (
-                          <div
-                            key={i}
-                            className="w-3 h-3 rounded-sm"
-                            style={{ backgroundColor: color }}
-                          />
-                        ))}
-                    </div>
-                    {paletteName}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Color Layers
-            </h2>
-            <Button
-              onClick={randomizePositions}
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              title="Randomize positions"
-            >
-              <Shuffle className="h-3 w-3" />
-            </Button>
-          </div>
-          <div className="space-y-2">
-            {points.map((point) => (
-              <div
-                key={point.id}
-                className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${
-                  selectedPoint === point.id
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:border-primary/50"
-                }`}
-                onClick={() => setSelectedPoint(point.id)}
-              >
-                <input
-                  type="color"
-                  value={point.color}
-                  onChange={(e) => updatePointColor(point.id, e.target.value)}
-                  className="w-10 h-10 rounded cursor-pointer border-0"
-                />
-                <div className="flex-1 text-xs font-mono">{point.color}</div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removePoint(point.id);
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-2">
           <Button
-            onClick={addPoint}
-            variant="outline"
-            className="w-full mt-3"
-            disabled={points.length >= 10}
+            variant="ghost"
+            size="icon"
+            onClick={() => setZoom(Math.max(25, zoom - 25))}
+            title="Zoom Out"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Layer
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <div className="w-20 text-center text-sm font-mono">{zoom}%</div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setZoom(Math.min(400, zoom + 25))}
+            title="Zoom In"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setZoom(100)}
+            title="Fit to View"
+          >
+            <Maximize className="h-4 w-4" />
           </Button>
         </div>
 
-        <div>
-          <label className="text-sm font-semibold text-muted-foreground mb-3 block">
-            Blend Mode
-          </label>
-          <Select value={blendMode} onValueChange={(value) => setBlendMode(value as GlobalCompositeOperation)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {BLEND_MODES.map((mode) => (
-                <SelectItem key={mode} value={mode}>
-                  {BLEND_MODE_LABELS[mode]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Export */}
+        <div className="flex items-center gap-2">
+          <Button onClick={() => exportCanvas("png")} variant="default" size="sm">
+            <Download className="h-4 w-4 mr-2" />
+            Export PNG
+          </Button>
+          <Button onClick={() => exportCanvas("svg")} variant="outline" size="sm">
+            <Download className="h-4 w-4 mr-2" />
+            SVG
+          </Button>
         </div>
+      </div>
 
-        <div>
-          <label className="text-sm font-semibold text-muted-foreground mb-3 block">
-            Blur: {blur}px
-          </label>
-          <Slider
-            value={[blur]}
-            onValueChange={(v) => updateBlur(v[0])}
-            min={0}
-            max={300}
-            step={1}
-            className="w-full"
-          />
-        </div>
-
-        <div className="space-y-4 pt-4 border-t border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Maximize2 className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold text-muted-foreground">Edge Control</h3>
-          </div>
-
-          <div>
-            <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
-              Edge Presets
-            </label>
-            <Select onValueChange={applyEdgePreset}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose preset..." />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.keys(EDGE_PRESETS).map((presetName) => (
-                  <SelectItem key={presetName} value={presetName}>
-                    {presetName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Color Spread: {gradientSpread.toFixed(1)}
-            </label>
-            <Slider
-              value={[gradientSpread]}
-              onValueChange={(v) => updateGradientSpread(v[0])}
-              min={0.3}
-              max={1.5}
-              step={0.1}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Background Color
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="color"
-                value={backgroundColor}
-                onChange={(e) => updateBackgroundColor(e.target.value)}
-                className="w-12 h-10 rounded cursor-pointer border border-border"
-              />
-              <div className="flex-1 flex gap-1">
-                {["#ffffff", "#000000", "#f5f5f5", "#1a1a1a"].map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => updateBackgroundColor(color)}
-                    className="flex-1 h-10 rounded border-2 transition-all hover:scale-105"
-                    style={{ 
-                      backgroundColor: color,
-                      borderColor: backgroundColor === color ? "hsl(var(--primary))" : "hsl(var(--border))"
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Fade Distance: {fadeEndpoint.toFixed(2)}
-            </label>
-            <Slider
-              value={[fadeEndpoint]}
-              onValueChange={(v) => updateFadeEndpoint(v[0])}
-              min={0.3}
-              max={1.0}
-              step={0.05}
-              className="w-full"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4 pt-4 border-t border-border">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-semibold text-muted-foreground">
-              Noise Texture
-            </label>
-            <Button
-              variant={noiseEnabled ? "default" : "outline"}
-              size="sm"
-              onClick={() => setNoiseEnabled(!noiseEnabled)}
-              className="h-7 px-3 text-xs"
-            >
-              {noiseEnabled ? "On" : "Off"}
-            </Button>
-          </div>
-
-          {noiseEnabled && (
-            <div className="space-y-3 pl-1">
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Opacity: {noiseOpacity}%
-                </label>
-                <Slider
-                  value={[noiseOpacity]}
-                  onValueChange={(v) => setNoiseOpacity(v[0])}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Density: {noiseDensity}
-                </label>
-                <Slider
-                  value={[noiseDensity]}
-                  onValueChange={(v) => setNoiseDensity(v[0])}
-                  min={1}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Sharpness: {noiseSharpness.toFixed(1)}
-                </label>
-                <Slider
-                  value={[noiseSharpness]}
-                  onValueChange={(v) => setNoiseSharpness(v[0])}
-                  min={0.1}
-                  max={5}
-                  step={0.1}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4 pt-4 border-t border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <ImageIcon className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold text-muted-foreground">Image & Dither</h3>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Upload Image
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-                id="image-upload"
-              />
-              <label htmlFor="image-upload" className="flex-1">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  asChild
-                >
-                  <span>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {uploadedImage ? "Change Image" : "Upload Image"}
-                  </span>
-                </Button>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar - Scrollable */}
+        <div className="w-72 bg-card border-r border-border overflow-y-auto">
+          <div className="p-4 space-y-6">
+            {/* Color Palette */}
+            <div>
+              <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
+                <Palette className="h-4 w-4" />
+                Color Palette
               </label>
-              {uploadedImage && (
+              <Select onValueChange={applyPalette}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Choose preset..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-80 bg-popover">
+                  {Object.keys(COLOR_PALETTES).map((paletteName) => (
+                    <SelectItem key={paletteName} value={paletteName}>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-0.5">
+                          {COLOR_PALETTES[paletteName as keyof typeof COLOR_PALETTES]
+                            .slice(0, 5)
+                            .map((color, i) => (
+                              <div
+                                key={i}
+                                className="w-3 h-3 rounded-sm"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                        </div>
+                        {paletteName}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Gradient Layers */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted-foreground">
+                  Gradient Layers
+                </h2>
                 <Button
+                  onClick={randomizePositions}
                   variant="ghost"
                   size="icon"
-                  onClick={() => {
-                    setUploadedImage(null);
-                    toast.success("Image removed");
-                  }}
+                  className="h-7 w-7"
+                  title="Randomize positions"
                 >
-                  <X className="h-4 w-4" />
+                  <Shuffle className="h-3 w-3" />
                 </Button>
+              </div>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                {points.map((point) => (
+                  <div
+                    key={point.id}
+                    className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${
+                      selectedPoint === point.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => setSelectedPoint(point.id)}
+                  >
+                    <input
+                      type="color"
+                      value={point.color}
+                      onChange={(e) => updatePointColor(point.id, e.target.value)}
+                      className="w-10 h-10 rounded cursor-pointer border-0"
+                    />
+                    <div className="flex-1 text-xs font-mono">{point.color}</div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removePoint(point.id);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button
+                onClick={addPoint}
+                variant="outline"
+                className="w-full mt-3"
+                disabled={points.length >= 10}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Layer
+              </Button>
+            </div>
+
+            {/* Image & Dither */}
+            <div className="pt-4 border-t border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-muted-foreground">Image & Dither</h3>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground block mb-2">
+                  Upload Image
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label htmlFor="image-upload" className="flex-1">
+                    <Button variant="outline" className="w-full" asChild>
+                      <span>
+                        <Upload className="h-4 w-4 mr-2" />
+                        {uploadedImage ? "Change" : "Upload"}
+                      </span>
+                    </Button>
+                  </label>
+                  {uploadedImage && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setUploadedImage(null);
+                        toast.success("Image removed");
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {uploadedImage && (
+                <div className="space-y-3 mt-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-2">
+                      Dither Effect
+                    </label>
+                    <Select value={ditherMode} onValueChange={(value) => setDitherMode(value as DitherMode)}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="floyd-steinberg">Floyd-Steinberg</SelectItem>
+                        <SelectItem value="atkinson">Atkinson</SelectItem>
+                        <SelectItem value="bayer-2x2">Bayer 2×2</SelectItem>
+                        <SelectItem value="bayer-4x4">Bayer 4×4</SelectItem>
+                        <SelectItem value="bayer-8x8">Bayer 8×8</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {ditherMode !== "none" && (
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-2">
+                        Threshold: {ditherIntensity}
+                      </label>
+                      <Slider
+                        value={[ditherIntensity]}
+                        onValueChange={(v) => setDitherIntensity(v[0])}
+                        min={0}
+                        max={255}
+                        step={1}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-2">
+                      Opacity: {imageOpacity}%
+                    </label>
+                    <Slider
+                      value={[imageOpacity]}
+                      onValueChange={(v) => setImageOpacity(v[0])}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>
+        </div>
 
-          {uploadedImage && (
-            <>
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Dither Effect
-                </label>
-                <Select value={ditherMode} onValueChange={(value) => setDitherMode(value as DitherMode)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="floyd-steinberg">Floyd-Steinberg</SelectItem>
-                    <SelectItem value="atkinson">Atkinson</SelectItem>
-                    <SelectItem value="bayer-2x2">Bayer 2×2</SelectItem>
-                    <SelectItem value="bayer-4x4">Bayer 4×4</SelectItem>
-                    <SelectItem value="bayer-8x8">Bayer 8×8</SelectItem>
-                  </SelectContent>
-                </Select>
+        {/* Center Canvas - Fixed, not scrollable */}
+        <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-8">
+          <div className="relative" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center' }}>
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              className="rounded-lg shadow-2xl cursor-crosshair border border-border bg-background"
+              style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 200px)' }}
+            />
+            {/* Point indicators */}
+            {points.map((point) => (
+              <div
+                key={point.id}
+                className={`absolute w-6 h-6 rounded-full border-2 border-white shadow-lg transition-transform pointer-events-none ${
+                  selectedPoint === point.id ? "scale-125 ring-2 ring-primary" : ""
+                }`}
+                style={{
+                  left: `${point.x * 100}%`,
+                  top: `${point.y * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                  backgroundColor: point.color,
+                }}
+              />
+            ))}
+            <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-mono">
+              {canvasSize.width} × {canvasSize.height}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Sidebar - Scrollable */}
+        <div className="w-72 bg-card border-l border-border overflow-y-auto">
+          <div className="p-4 space-y-6">
+            {/* Canvas Size */}
+            <div>
+              <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
+                Canvas Size
+              </h2>
+              <div className="grid grid-cols-3 gap-2">
+                {CANVAS_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.name}
+                    variant={canvasSize.name === preset.name ? "default" : "outline"}
+                    onClick={() => setCanvasSize(preset)}
+                    className="font-mono text-xs"
+                    size="sm"
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
               </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Width</label>
+                  <input
+                    type="number"
+                    value={canvasSize.width}
+                    onChange={(e) =>
+                      setCanvasSize({
+                        ...canvasSize,
+                        width: parseInt(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full bg-input border border-border rounded px-2 py-1.5 text-sm mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Height</label>
+                  <input
+                    type="number"
+                    value={canvasSize.height}
+                    onChange={(e) =>
+                      setCanvasSize({
+                        ...canvasSize,
+                        height: parseInt(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full bg-input border border-border rounded px-2 py-1.5 text-sm mt-1"
+                  />
+                </div>
+              </div>
+            </div>
 
-              {ditherMode !== "none" && (
+            {/* Effects */}
+            <div className="pt-4 border-t border-border">
+              <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Effects</h2>
+              
+              <div className="space-y-4">
                 <div>
                   <label className="text-xs text-muted-foreground block mb-2">
-                    Dither Threshold: {ditherIntensity}
+                    Blur: {blur}px
                   </label>
                   <Slider
-                    value={[ditherIntensity]}
-                    onValueChange={(v) => setDitherIntensity(v[0])}
+                    value={[blur]}
+                    onValueChange={(v) => updateBlur(v[0])}
                     min={0}
-                    max={255}
+                    max={300}
                     step={1}
                     className="w-full"
                   />
                 </div>
-              )}
 
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Image Opacity: {imageOpacity}%
-                </label>
-                <Slider
-                  value={[imageOpacity]}
-                  onValueChange={(v) => setImageOpacity(v[0])}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Main Canvas Area */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="relative">
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            className="rounded-xl shadow-2xl cursor-crosshair max-w-full max-h-[80vh] border border-border"
-            style={{ width: "auto", height: "auto" }}
-          />
-          {/* Point indicators */}
-          {points.map((point) => (
-            <div
-              key={point.id}
-              className={`absolute w-6 h-6 rounded-full border-2 border-white shadow-lg transition-transform pointer-events-none ${
-                selectedPoint === point.id ? "scale-125" : ""
-              }`}
-              style={{
-                left: `${point.x * 100}%`,
-                top: `${point.y * 100}%`,
-                transform: "translate(-50%, -50%)",
-                backgroundColor: point.color,
-              }}
-            />
-          ))}
-          <div className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full text-xs text-white">
-            {canvasSize.width} × {canvasSize.height}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Sidebar */}
-      <div className="w-80 bg-card border-l border-border p-6 space-y-6 overflow-y-auto">
-        <div>
-          <h2 className="text-sm font-semibold mb-4 text-muted-foreground">
-            Canvas Size
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
-            {CANVAS_PRESETS.map((preset) => (
-              <Button
-                key={preset.name}
-                variant={
-                  canvasSize.name === preset.name ? "default" : "outline"
-                }
-                onClick={() => setCanvasSize(preset)}
-                className="font-mono text-xs"
-              >
-                {preset.name}
-              </Button>
-            ))}
-          </div>
-          <div className="mt-4 space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground">Width</label>
-                <input
-                  type="number"
-                  value={canvasSize.width}
-                  onChange={(e) =>
-                    setCanvasSize({
-                      ...canvasSize,
-                      width: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="w-full bg-input border border-border rounded px-3 py-2 text-sm mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">Height</label>
-                <input
-                  type="number"
-                  value={canvasSize.height}
-                  onChange={(e) =>
-                    setCanvasSize({
-                      ...canvasSize,
-                      height: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="w-full bg-input border border-border rounded px-3 py-2 text-sm mt-1"
-                />
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Blend Mode
+                  </label>
+                  <Select value={blendMode} onValueChange={(value) => setBlendMode(value as GlobalCompositeOperation)}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      {BLEND_MODES.map((mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {BLEND_MODE_LABELS[mode]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div>
-          <h2 className="text-sm font-semibold mb-4 text-muted-foreground">
-            Export Format
-          </h2>
-          <div className="space-y-2">
-            <Button
-              onClick={() => exportCanvas("png")}
-              className="w-full justify-start"
-              variant="default"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              PNG (Max Quality)
-            </Button>
-            <Button
-              onClick={() => exportCanvas("svg")}
-              className="w-full justify-start"
-              variant="outline"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              SVG (Vector)
-            </Button>
-          </div>
-        </div>
+            {/* Edge Control */}
+            <div className="pt-4 border-t border-border">
+              <div className="flex items-center gap-2 mb-3">
+                <Maximize2 className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-muted-foreground">Edge Control</h3>
+              </div>
 
-        <div className="pt-4 border-t border-border text-xs text-muted-foreground space-y-2">
-          <p>💡 Drag points to move gradients</p>
-          <p>🎨 Try different blend modes</p>
-          <p>⌨️ Ctrl+Z to undo, Ctrl+Y to redo</p>
-          <p>🎲 Randomize positions for variety</p>
-          <p>🖼️ Upload images for dither effects</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Presets
+                  </label>
+                  <Select onValueChange={applyEdgePreset}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose preset..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      {Object.keys(EDGE_PRESETS).map((presetName) => (
+                        <SelectItem key={presetName} value={presetName}>
+                          {presetName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Spread: {gradientSpread.toFixed(1)}
+                  </label>
+                  <Slider
+                    value={[gradientSpread]}
+                    onValueChange={(v) => updateGradientSpread(v[0])}
+                    min={0.3}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Background
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={backgroundColor}
+                      onChange={(e) => updateBackgroundColor(e.target.value)}
+                      className="w-12 h-9 rounded cursor-pointer border border-border"
+                    />
+                    <div className="flex-1 grid grid-cols-4 gap-1">
+                      {["#ffffff", "#000000", "#f5f5f5", "#1a1a1a"].map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => updateBackgroundColor(color)}
+                          className="h-9 rounded border-2 transition-all hover:scale-105"
+                          style={{
+                            backgroundColor: color,
+                            borderColor: backgroundColor === color ? "hsl(var(--primary))" : "hsl(var(--border))"
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Fade: {fadeEndpoint.toFixed(2)}
+                  </label>
+                  <Slider
+                    value={[fadeEndpoint]}
+                    onValueChange={(v) => updateFadeEndpoint(v[0])}
+                    min={0.3}
+                    max={1.0}
+                    step={0.05}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Noise Texture */}
+            <div className="pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-muted-foreground">Noise Texture</h3>
+                <Button
+                  variant={noiseEnabled ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setNoiseEnabled(!noiseEnabled)}
+                  className="h-7 px-3 text-xs"
+                >
+                  {noiseEnabled ? "On" : "Off"}
+                </Button>
+              </div>
+
+              {noiseEnabled && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-2">
+                      Opacity: {noiseOpacity}%
+                    </label>
+                    <Slider
+                      value={[noiseOpacity]}
+                      onValueChange={(v) => setNoiseOpacity(v[0])}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-2">
+                      Density: {noiseDensity}
+                    </label>
+                    <Slider
+                      value={[noiseDensity]}
+                      onValueChange={(v) => setNoiseDensity(v[0])}
+                      min={1}
+                      max={100}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-2">
+                      Sharpness: {noiseSharpness.toFixed(1)}
+                    </label>
+                    <Slider
+                      value={[noiseSharpness]}
+                      onValueChange={(v) => setNoiseSharpness(v[0])}
+                      min={0.1}
+                      max={5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
