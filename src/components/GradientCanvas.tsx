@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle } from "lucide-react";
+import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -21,6 +21,9 @@ interface GradientPoint {
 interface CanvasState {
   points: GradientPoint[];
   blur: number;
+  gradientSpread?: number;
+  backgroundColor?: string;
+  fadeEndpoint?: number;
 }
 
 const COLOR_PALETTES = {
@@ -42,6 +45,14 @@ const CANVAS_PRESETS = [
   { name: "9:16", width: 900, height: 1600 },
   { name: "3:4", width: 900, height: 1200 },
 ];
+
+const EDGE_PRESETS = {
+  "Full Coverage": { spread: 1.2, fadeEndpoint: 0.7, backgroundColor: "#ffffff" },
+  "Soft & Airy": { spread: 0.5, fadeEndpoint: 1.0, backgroundColor: "#ffffff" },
+  "Bold & Vibrant": { spread: 0.9, fadeEndpoint: 0.5, backgroundColor: "#000000" },
+  "Organic Blend": { spread: 0.7, fadeEndpoint: 0.8, backgroundColor: "#ffffff" },
+  "Minimal Edges": { spread: 0.4, fadeEndpoint: 0.9, backgroundColor: "#f5f5f5" },
+};
 
 const DEFAULT_COLORS = [
   "#ffc2d1",
@@ -114,13 +125,30 @@ export const GradientCanvas = () => {
   // Blend mode
   const [blendMode, setBlendMode] = useState<GlobalCompositeOperation>("source-over");
   
+  // Edge control settings
+  const [gradientSpread, setGradientSpread] = useState(0.6);
+  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
+  const [fadeEndpoint, setFadeEndpoint] = useState(1.0);
+  
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   // Save state to history
-  const saveToHistory = useCallback((newPoints: GradientPoint[], newBlur: number) => {
-    const newState: CanvasState = { points: newPoints, blur: newBlur };
+  const saveToHistory = useCallback((
+    newPoints: GradientPoint[], 
+    newBlur: number,
+    newSpread?: number,
+    newBgColor?: string,
+    newFadeEnd?: number
+  ) => {
+    const newState: CanvasState = { 
+      points: newPoints, 
+      blur: newBlur,
+      gradientSpread: newSpread ?? gradientSpread,
+      backgroundColor: newBgColor ?? backgroundColor,
+      fadeEndpoint: newFadeEnd ?? fadeEndpoint,
+    };
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newState);
     // Keep only last 50 states
@@ -130,7 +158,7 @@ export const GradientCanvas = () => {
       setHistoryIndex(historyIndex + 1);
     }
     setHistory(newHistory);
-  }, [history, historyIndex]);
+  }, [history, historyIndex, gradientSpread, backgroundColor, fadeEndpoint]);
 
   // Undo function
   const undo = useCallback(() => {
@@ -140,6 +168,9 @@ export const GradientCanvas = () => {
       const state = history[newIndex];
       setPoints(state.points);
       setBlur(state.blur);
+      if (state.gradientSpread !== undefined) setGradientSpread(state.gradientSpread);
+      if (state.backgroundColor !== undefined) setBackgroundColor(state.backgroundColor);
+      if (state.fadeEndpoint !== undefined) setFadeEndpoint(state.fadeEndpoint);
       toast.success("Undone");
     }
   }, [history, historyIndex]);
@@ -152,6 +183,9 @@ export const GradientCanvas = () => {
       const state = history[newIndex];
       setPoints(state.points);
       setBlur(state.blur);
+      if (state.gradientSpread !== undefined) setGradientSpread(state.gradientSpread);
+      if (state.backgroundColor !== undefined) setBackgroundColor(state.backgroundColor);
+      if (state.fadeEndpoint !== undefined) setFadeEndpoint(state.fadeEndpoint);
       toast.success("Redone");
     }
   }, [history, historyIndex]);
@@ -228,8 +262,8 @@ export const GradientCanvas = () => {
     canvas.width = canvasSize.width;
     canvas.height = canvasSize.height;
 
-    // Clear canvas
-    ctx.fillStyle = "#ffffff";
+    // Clear canvas with background color
+    ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Set blend mode
@@ -242,11 +276,14 @@ export const GradientCanvas = () => {
     points.forEach((point) => {
       const x = point.x * canvas.width;
       const y = point.y * canvas.height;
-      const radius = Math.max(canvas.width, canvas.height) * 0.5;
+      const radius = Math.max(canvas.width, canvas.height) * gradientSpread;
 
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
       gradient.addColorStop(0, point.color);
-      gradient.addColorStop(1, "transparent");
+      gradient.addColorStop(fadeEndpoint, point.color + "00");
+      if (fadeEndpoint < 1) {
+        gradient.addColorStop(1, point.color + "00");
+      }
 
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -259,7 +296,7 @@ export const GradientCanvas = () => {
     if (noiseEnabled) {
       generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode]);
+  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -379,6 +416,32 @@ export const GradientCanvas = () => {
   const updateBlur = (value: number) => {
     setBlur(value);
     saveToHistory(points, value);
+  };
+
+  const updateGradientSpread = (value: number) => {
+    setGradientSpread(value);
+    saveToHistory(points, blur, value);
+  };
+
+  const updateBackgroundColor = (color: string) => {
+    setBackgroundColor(color);
+    saveToHistory(points, blur, undefined, color);
+  };
+
+  const updateFadeEndpoint = (value: number) => {
+    setFadeEndpoint(value);
+    saveToHistory(points, blur, undefined, undefined, value);
+  };
+
+  const applyEdgePreset = (presetName: string) => {
+    const preset = EDGE_PRESETS[presetName as keyof typeof EDGE_PRESETS];
+    if (!preset) return;
+
+    setGradientSpread(preset.spread);
+    setBackgroundColor(preset.backgroundColor);
+    setFadeEndpoint(preset.fadeEndpoint);
+    saveToHistory(points, blur, preset.spread, preset.backgroundColor, preset.fadeEndpoint);
+    toast.success(`Applied ${presetName} preset`);
   };
 
   const randomizePositions = () => {
@@ -596,6 +659,86 @@ export const GradientCanvas = () => {
             step={1}
             className="w-full"
           />
+        </div>
+
+        <div className="space-y-4 pt-4 border-t border-border">
+          <div className="flex items-center gap-2 mb-3">
+            <Maximize2 className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">Edge Control</h3>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
+              Edge Presets
+            </label>
+            <Select onValueChange={applyEdgePreset}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose preset..." />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.keys(EDGE_PRESETS).map((presetName) => (
+                  <SelectItem key={presetName} value={presetName}>
+                    {presetName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Color Spread: {gradientSpread.toFixed(1)}
+            </label>
+            <Slider
+              value={[gradientSpread]}
+              onValueChange={(v) => updateGradientSpread(v[0])}
+              min={0.3}
+              max={1.5}
+              step={0.1}
+              className="w-full"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Background Color
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="color"
+                value={backgroundColor}
+                onChange={(e) => updateBackgroundColor(e.target.value)}
+                className="w-12 h-10 rounded cursor-pointer border border-border"
+              />
+              <div className="flex-1 flex gap-1">
+                {["#ffffff", "#000000", "#f5f5f5", "#1a1a1a"].map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => updateBackgroundColor(color)}
+                    className="flex-1 h-10 rounded border-2 transition-all hover:scale-105"
+                    style={{ 
+                      backgroundColor: color,
+                      borderColor: backgroundColor === color ? "hsl(var(--primary))" : "hsl(var(--border))"
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Fade Distance: {fadeEndpoint.toFixed(2)}
+            </label>
+            <Slider
+              value={[fadeEndpoint]}
+              onValueChange={(v) => updateFadeEndpoint(v[0])}
+              min={0.3}
+              max={1.0}
+              step={0.05}
+              className="w-full"
+            />
+          </div>
         </div>
 
         <div className="space-y-4 pt-4 border-t border-border">
