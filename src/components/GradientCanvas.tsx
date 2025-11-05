@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette } from "lucide-react";
+import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -53,6 +53,50 @@ const DEFAULT_COLORS = [
   "#818cf8",
 ];
 
+const BLEND_MODES: GlobalCompositeOperation[] = [
+  "source-over",     // Normal
+  "multiply",
+  "screen",
+  "overlay",
+  "darken",
+  "lighten",
+  "color-dodge",
+  "color-burn",
+  "hard-light",
+  "soft-light",
+  "difference",
+  "exclusion",
+];
+
+const BLEND_MODE_LABELS: Record<GlobalCompositeOperation, string> = {
+  "source-over": "Normal",
+  "multiply": "Multiply",
+  "screen": "Screen",
+  "overlay": "Overlay",
+  "darken": "Darken",
+  "lighten": "Lighten",
+  "color-dodge": "Color Dodge",
+  "color-burn": "Color Burn",
+  "hard-light": "Hard Light",
+  "soft-light": "Soft Light",
+  "difference": "Difference",
+  "exclusion": "Exclusion",
+  "source-atop": "Source Atop",
+  "source-in": "Source In",
+  "source-out": "Source Out",
+  "destination-over": "Destination Over",
+  "destination-atop": "Destination Atop",
+  "destination-in": "Destination In",
+  "destination-out": "Destination Out",
+  "lighter": "Lighter",
+  "copy": "Copy",
+  "xor": "XOR",
+  "hue": "Hue",
+  "saturation": "Saturation",
+  "color": "Color",
+  "luminosity": "Luminosity",
+};
+
 export const GradientCanvas = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [points, setPoints] = useState<GradientPoint[]>([]);
@@ -66,6 +110,9 @@ export const GradientCanvas = () => {
   const [noiseOpacity, setNoiseOpacity] = useState(60);
   const [noiseDensity, setNoiseDensity] = useState(42);
   const [noiseSharpness, setNoiseSharpness] = useState(2.0);
+  
+  // Blend mode
+  const [blendMode, setBlendMode] = useState<GlobalCompositeOperation>("source-over");
   
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
@@ -138,13 +185,14 @@ export const GradientCanvas = () => {
     saveToHistory(initialPoints, 120);
   }, []);
 
-  // Generate noise texture
-  const generateNoiseTexture = useCallback((width: number, height: number): ImageData => {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d')!;
-    const imageData = ctx.createImageData(width, height);
+  // Generate noise texture - fixed to use proper canvas compositing
+  const generateNoiseTexture = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    // Create temporary canvas for noise
+    const noiseCanvas = document.createElement('canvas');
+    noiseCanvas.width = width;
+    noiseCanvas.height = height;
+    const noiseCtx = noiseCanvas.getContext('2d')!;
+    const imageData = noiseCtx.createImageData(width, height);
     const data = imageData.data;
 
     for (let i = 0; i < data.length; i += 4) {
@@ -154,13 +202,19 @@ export const GradientCanvas = () => {
         data[i] = noise;     // Red
         data[i + 1] = noise; // Green
         data[i + 2] = noise; // Blue
-        data[i + 3] = noiseOpacity * 2.55; // Alpha
+        data[i + 3] = 255;   // Full alpha
       } else {
         data[i + 3] = 0; // Transparent
       }
     }
 
-    return imageData;
+    noiseCtx.putImageData(imageData, 0, 0);
+
+    // Apply to main canvas with opacity
+    const previousAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = noiseOpacity / 100;
+    ctx.drawImage(noiseCanvas, 0, 0);
+    ctx.globalAlpha = previousAlpha;
   }, [noiseDensity, noiseOpacity, noiseSharpness]);
 
   // Draw gradient on canvas
@@ -177,6 +231,9 @@ export const GradientCanvas = () => {
     // Clear canvas
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Set blend mode
+    ctx.globalCompositeOperation = blendMode;
 
     // Apply blur using filter
     ctx.filter = `blur(${blur}px)`;
@@ -196,13 +253,13 @@ export const GradientCanvas = () => {
     });
 
     ctx.filter = "none";
+    ctx.globalCompositeOperation = "source-over";
 
     // Add noise texture
     if (noiseEnabled) {
-      const noiseTexture = generateNoiseTexture(canvas.width, canvas.height);
-      ctx.putImageData(noiseTexture, 0, 0);
+      generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture]);
+  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -324,6 +381,18 @@ export const GradientCanvas = () => {
     saveToHistory(points, value);
   };
 
+  const randomizePositions = () => {
+    const newPoints = points.map((point) => ({
+      ...point,
+      x: Math.random(),
+      y: Math.random(),
+    }));
+
+    setPoints(newPoints);
+    saveToHistory(newPoints, blur);
+    toast.success("Positions randomized!");
+  };
+
   const exportCanvas = async (format: "png" | "svg") => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -440,9 +509,20 @@ export const GradientCanvas = () => {
         </div>
 
         <div>
-          <h2 className="text-sm font-semibold mb-4 text-muted-foreground">
-            Color Layers
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Color Layers
+            </h2>
+            <Button
+              onClick={randomizePositions}
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              title="Randomize positions"
+            >
+              <Shuffle className="h-3 w-3" />
+            </Button>
+          </div>
           <div className="space-y-2">
             {points.map((point) => (
               <div
@@ -484,6 +564,24 @@ export const GradientCanvas = () => {
             <Plus className="h-4 w-4 mr-2" />
             Add Layer
           </Button>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-muted-foreground mb-3 block">
+            Blend Mode
+          </label>
+          <Select value={blendMode} onValueChange={(value) => setBlendMode(value as GlobalCompositeOperation)}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {BLEND_MODES.map((mode) => (
+                <SelectItem key={mode} value={mode}>
+                  {BLEND_MODE_LABELS[mode]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
@@ -677,9 +775,9 @@ export const GradientCanvas = () => {
 
         <div className="pt-4 border-t border-border text-xs text-muted-foreground space-y-2">
           <p>💡 Drag points to move gradients</p>
-          <p>🎨 Click swatches to change colors</p>
+          <p>🎨 Try different blend modes</p>
           <p>⌨️ Ctrl+Z to undo, Ctrl+Y to redo</p>
-          <p>🎭 Try different color palettes</p>
+          <p>🎲 Randomize positions for variety</p>
         </div>
       </div>
     </div>
