@@ -278,8 +278,8 @@ export const GradientCanvas = () => {
   
   // Noise settings
   const [noiseEnabled, setNoiseEnabled] = useState(true);
-  const [noiseOpacity, setNoiseOpacity] = useState(60);
-  const [noiseDensity, setNoiseDensity] = useState(42);
+  const [noiseOpacity, setNoiseOpacity] = useState(20);
+  const [noiseDensity, setNoiseDensity] = useState(20);
   const [noiseSharpness, setNoiseSharpness] = useState(2.0);
   
   // Blend mode
@@ -613,7 +613,7 @@ export const GradientCanvas = () => {
       }
     }
 
-    // Set blend mode
+    // Set blend mode for gradients
     ctx.globalCompositeOperation = blendMode;
 
     // Apply blur using filter
@@ -637,6 +637,71 @@ export const GradientCanvas = () => {
     });
 
     ctx.filter = "none";
+    
+    // If there's an image, use multiply or overlay blend mode to blend gradient into it
+    if (uploadedImage && blendMode === "source-over") {
+      // Reset to a better blend mode for combining with dithered images
+      // We'll create a composite layer
+      const gradientCanvas = document.createElement('canvas');
+      gradientCanvas.width = canvas.width;
+      gradientCanvas.height = canvas.height;
+      const gradCtx = gradientCanvas.getContext('2d');
+      
+      if (gradCtx) {
+        // Copy current canvas state (image + gradients)
+        const currentImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Redraw just the image
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        if (uploadedImage) {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = canvas.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          
+          if (tempCtx) {
+            tempCtx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+            
+            if (ditherMode !== "none") {
+              const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+              const dithered = applyDither(imageData, ditherMode, ditherIntensity);
+              tempCtx.putImageData(dithered, 0, 0);
+            }
+            
+            ctx.globalAlpha = imageOpacity / 100;
+            ctx.drawImage(tempCanvas, 0, 0);
+            ctx.globalAlpha = 1;
+          }
+        }
+        
+        // Draw gradients on separate canvas
+        gradCtx.filter = `blur(${blur}px)`;
+        points.forEach((point) => {
+          const x = point.x * canvas.width;
+          const y = point.y * canvas.height;
+          const radius = Math.max(canvas.width, canvas.height) * gradientSpread;
+
+          const gradient = gradCtx.createRadialGradient(x, y, 0, x, y, radius);
+          gradient.addColorStop(0, point.color);
+          gradient.addColorStop(fadeEndpoint, point.color + "00");
+          if (fadeEndpoint < 1) {
+            gradient.addColorStop(1, point.color + "00");
+          }
+
+          gradCtx.fillStyle = gradient;
+          gradCtx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+        
+        // Blend gradient layer onto image using multiply for better integration
+        ctx.globalCompositeOperation = "multiply";
+        ctx.globalAlpha = 0.7; // Slight transparency for better blending
+        ctx.drawImage(gradientCanvas, 0, 0);
+        ctx.globalAlpha = 1;
+      }
+    }
+    
     ctx.globalCompositeOperation = "source-over";
 
     // Add noise texture
