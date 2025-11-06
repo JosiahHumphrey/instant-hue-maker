@@ -1374,6 +1374,7 @@ export const GradientCanvas = () => {
             </div>
           </div>
         </div>
+        </div>
 
         {/* Center Canvas - Fixed, not scrollable */}
         <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-8">
@@ -1646,6 +1647,7 @@ export const GradientCanvas = () => {
               )}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
