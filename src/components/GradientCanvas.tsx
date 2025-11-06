@@ -47,6 +47,13 @@ interface SavedPreset {
   imageOpacity: number;
   ditherScale: number;
   ditherInvert: boolean;
+  imageContrast: number;
+  imageBrightness: number;
+  imageMidtones: number;
+  imageHighlights: number;
+  imageLuminanceThreshold: number;
+  imageHue: number;
+  imageSaturation: number;
 }
 
 const COLOR_PALETTES = {
@@ -320,6 +327,15 @@ export const GradientCanvas = () => {
   const [ditherScale, setDitherScale] = useState(1.0);
   const [ditherInvert, setDitherInvert] = useState(false);
   
+  // Advanced image adjustments
+  const [imageContrast, setImageContrast] = useState(0);
+  const [imageBrightness, setImageBrightness] = useState(0);
+  const [imageMidtones, setImageMidtones] = useState(0);
+  const [imageHighlights, setImageHighlights] = useState(0);
+  const [imageLuminanceThreshold, setImageLuminanceThreshold] = useState(127);
+  const [imageHue, setImageHue] = useState(0);
+  const [imageSaturation, setImageSaturation] = useState(0);
+  
   // Zoom state
   const [zoom, setZoom] = useState(100);
   
@@ -504,6 +520,104 @@ export const GradientCanvas = () => {
     ctx.drawImage(noiseCanvas, 0, 0);
     ctx.globalAlpha = previousAlpha;
   }, [noiseDensity, noiseOpacity, noiseSharpness]);
+
+  // Advanced image processing
+  const applyImageAdjustments = useCallback((imageData: ImageData): ImageData => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    for (let i = 0; i < data.length; i += 4) {
+      let r = data[i];
+      let g = data[i + 1];
+      let b = data[i + 2];
+      
+      // Convert to HSL for hue and saturation adjustments
+      const max = Math.max(r, g, b) / 255;
+      const min = Math.min(r, g, b) / 255;
+      const l = (max + min) / 2;
+      let h = 0;
+      let s = 0;
+      
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        
+        switch (max) {
+          case r / 255:
+            h = ((g / 255 - b / 255) / d + (g < b ? 6 : 0)) / 6;
+            break;
+          case g / 255:
+            h = ((b / 255 - r / 255) / d + 2) / 6;
+            break;
+          case b / 255:
+            h = ((r / 255 - g / 255) / d + 4) / 6;
+            break;
+        }
+      }
+      
+      // Apply hue shift
+      h = (h + imageHue / 360) % 1;
+      if (h < 0) h += 1;
+      
+      // Apply saturation
+      s = Math.max(0, Math.min(1, s + imageSaturation / 100));
+      
+      // Convert back to RGB
+      const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      
+      if (s === 0) {
+        r = g = b = l * 255;
+      } else {
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3) * 255;
+        g = hue2rgb(p, q, h) * 255;
+        b = hue2rgb(p, q, h - 1/3) * 255;
+      }
+      
+      // Apply brightness
+      r = Math.max(0, Math.min(255, r + imageBrightness));
+      g = Math.max(0, Math.min(255, g + imageBrightness));
+      b = Math.max(0, Math.min(255, b + imageBrightness));
+      
+      // Apply contrast
+      const contrastFactor = (259 * (imageContrast + 255)) / (255 * (259 - imageContrast));
+      r = Math.max(0, Math.min(255, contrastFactor * (r - 128) + 128));
+      g = Math.max(0, Math.min(255, contrastFactor * (g - 128) + 128));
+      b = Math.max(0, Math.min(255, contrastFactor * (b - 128) + 128));
+      
+      // Apply midtones adjustment (affects mid-range luminosity)
+      const luminosity = (r + g + b) / 3;
+      if (luminosity > 64 && luminosity < 192) {
+        const midtoneFactor = 1 + (imageMidtones / 100);
+        r = Math.max(0, Math.min(255, r * midtoneFactor));
+        g = Math.max(0, Math.min(255, g * midtoneFactor));
+        b = Math.max(0, Math.min(255, b * midtoneFactor));
+      }
+      
+      // Apply highlights adjustment (affects bright areas)
+      if (luminosity > imageLuminanceThreshold) {
+        const highlightFactor = 1 + (imageHighlights / 100);
+        r = Math.max(0, Math.min(255, r * highlightFactor));
+        g = Math.max(0, Math.min(255, g * highlightFactor));
+        b = Math.max(0, Math.min(255, b * highlightFactor));
+      }
+      
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+    }
+    
+    return new ImageData(data, width, height);
+  }, [imageContrast, imageBrightness, imageMidtones, imageHighlights, imageLuminanceThreshold, imageHue, imageSaturation]);
 
   // Dithering algorithms
   const applyDither = useCallback((imageData: ImageData, mode: DitherMode, threshold: number): ImageData => {
@@ -718,8 +832,13 @@ export const GradientCanvas = () => {
         
         tempCtx.drawImage(uploadedImage, offsetX, offsetY, scaledWidth, scaledHeight);
         
+        // Apply image adjustments before dithering
+        let imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+        imageData = applyImageAdjustments(imageData);
+        tempCtx.putImageData(imageData, 0, 0);
+        
         if (ditherMode !== "none") {
-          const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+          imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
           const dithered = applyDither(imageData, ditherMode, ditherIntensity);
           tempCtx.putImageData(dithered, 0, 0);
         }
@@ -787,7 +906,7 @@ export const GradientCanvas = () => {
     if (noiseEnabled) {
       generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, ditherScale, ditherInvert, applyDither]);
+  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, ditherScale, ditherInvert, applyDither, applyImageAdjustments]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -968,6 +1087,13 @@ export const GradientCanvas = () => {
       imageOpacity,
       ditherScale,
       ditherInvert,
+      imageContrast,
+      imageBrightness,
+      imageMidtones,
+      imageHighlights,
+      imageLuminanceThreshold,
+      imageHue,
+      imageSaturation,
     };
 
     setSavedPresets([...savedPresets, preset]);
@@ -990,6 +1116,13 @@ export const GradientCanvas = () => {
     setImageOpacity(preset.imageOpacity);
     setDitherScale(preset.ditherScale ?? 1.0);
     setDitherInvert(preset.ditherInvert ?? false);
+    setImageContrast(preset.imageContrast ?? 0);
+    setImageBrightness(preset.imageBrightness ?? 0);
+    setImageMidtones(preset.imageMidtones ?? 0);
+    setImageHighlights(preset.imageHighlights ?? 0);
+    setImageLuminanceThreshold(preset.imageLuminanceThreshold ?? 127);
+    setImageHue(preset.imageHue ?? 0);
+    setImageSaturation(preset.imageSaturation ?? 0);
     saveToHistory(preset.points, preset.blur);
     toast.success(`Loaded preset "${preset.name}"`);
   };
@@ -1319,35 +1452,139 @@ export const GradientCanvas = () => {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-muted-foreground">
-                    Invert Colors
-                  </label>
-                  <Button
-                    variant={ditherInvert ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setDitherInvert(!ditherInvert)}
-                    className="h-7 px-3 text-xs"
-                  >
-                    {ditherInvert ? "On" : "Off"}
-                  </Button>
-                </div>
-              </>
-            )}
+                 <div className="flex items-center justify-between">
+                   <label className="text-xs text-muted-foreground">
+                     Invert Colors
+                   </label>
+                   <Button
+                     variant={ditherInvert ? "default" : "outline"}
+                     size="sm"
+                     onClick={() => setDitherInvert(!ditherInvert)}
+                     className="h-7 px-3 text-xs"
+                   >
+                     {ditherInvert ? "On" : "Off"}
+                   </Button>
+                 </div>
+               </>
+             )}
 
-            <div>
-              <label className="text-xs text-muted-foreground block mb-2">
-                Opacity: {imageOpacity}%
-              </label>
-              <Slider
-                value={[imageOpacity]}
-                onValueChange={(v) => setImageOpacity(v[0])}
-                min={0}
-                max={100}
-                step={1}
-                className="w-full"
-              />
-            </div>
+             <div className="space-y-3 pt-3 border-t">
+               <div className="text-xs font-medium text-muted-foreground">
+                 Image Adjustments
+               </div>
+               
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Contrast: {imageContrast}
+                 </label>
+                 <Slider
+                   value={[imageContrast]}
+                   onValueChange={(v) => setImageContrast(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Brightness: {imageBrightness}
+                 </label>
+                 <Slider
+                   value={[imageBrightness]}
+                   onValueChange={(v) => setImageBrightness(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Midtones: {imageMidtones}
+                 </label>
+                 <Slider
+                   value={[imageMidtones]}
+                   onValueChange={(v) => setImageMidtones(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Highlights: {imageHighlights}
+                 </label>
+                 <Slider
+                   value={[imageHighlights]}
+                   onValueChange={(v) => setImageHighlights(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Luminance Threshold: {imageLuminanceThreshold}
+                 </label>
+                 <Slider
+                   value={[imageLuminanceThreshold]}
+                   onValueChange={(v) => setImageLuminanceThreshold(v[0])}
+                   min={0}
+                   max={255}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Hue: {imageHue}°
+                 </label>
+                 <Slider
+                   value={[imageHue]}
+                   onValueChange={(v) => setImageHue(v[0])}
+                   min={-180}
+                   max={180}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Saturation: {imageSaturation}
+                 </label>
+                 <Slider
+                   value={[imageSaturation]}
+                   onValueChange={(v) => setImageSaturation(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
+             </div>
+
+             <div>
+               <label className="text-xs text-muted-foreground block mb-2">
+                 Opacity: {imageOpacity}%
+               </label>
+               <Slider
+                 value={[imageOpacity]}
+                 onValueChange={(v) => setImageOpacity(v[0])}
+                 min={0}
+                 max={100}
+                 step={1}
+                 className="w-full"
+               />
+             </div>
           </div>
         )}
       </div>
