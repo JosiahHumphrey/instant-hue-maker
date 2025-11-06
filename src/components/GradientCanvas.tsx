@@ -45,6 +45,8 @@ interface SavedPreset {
   ditherMode: DitherMode;
   ditherIntensity: number;
   imageOpacity: number;
+  ditherScale: number;
+  ditherInvert: boolean;
 }
 
 const COLOR_PALETTES = {
@@ -315,6 +317,8 @@ export const GradientCanvas = () => {
   const [ditherMode, setDitherMode] = useState<DitherMode>("none");
   const [ditherIntensity, setDitherIntensity] = useState(128);
   const [imageOpacity, setImageOpacity] = useState(100);
+  const [ditherScale, setDitherScale] = useState(1.0);
+  const [ditherInvert, setDitherInvert] = useState(false);
   
   // Zoom state
   const [zoom, setZoom] = useState(100);
@@ -706,7 +710,13 @@ export const GradientCanvas = () => {
       const tempCtx = tempCanvas.getContext('2d');
       
       if (tempCtx) {
-        tempCtx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+        // Apply scale to the image
+        const scaledWidth = canvas.width * ditherScale;
+        const scaledHeight = canvas.height * ditherScale;
+        const offsetX = (canvas.width - scaledWidth) / 2;
+        const offsetY = (canvas.height - scaledHeight) / 2;
+        
+        tempCtx.drawImage(uploadedImage, offsetX, offsetY, scaledWidth, scaledHeight);
         
         if (ditherMode !== "none") {
           const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
@@ -716,11 +726,16 @@ export const GradientCanvas = () => {
         
         const ditherData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
         
-        // Step 4: Combine - blacks get gradient color, whites stay white
+        // Step 4: Combine - blacks get gradient color, whites stay white (with optional invert)
         const finalData = ctx.createImageData(canvas.width, canvas.height);
         
         for (let i = 0; i < ditherData.data.length; i += 4) {
-          const ditherValue = ditherData.data[i]; // Grayscale, so R = G = B
+          let ditherValue = ditherData.data[i]; // Grayscale, so R = G = B
+          
+          // Apply invert if enabled
+          if (ditherInvert) {
+            ditherValue = 255 - ditherValue;
+          }
           
           if (ditherValue < 128) {
             // Black pixel - use gradient color with opacity control
@@ -772,7 +787,7 @@ export const GradientCanvas = () => {
     if (noiseEnabled) {
       generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, applyDither]);
+  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, ditherScale, ditherInvert, applyDither]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -951,6 +966,8 @@ export const GradientCanvas = () => {
       ditherMode,
       ditherIntensity,
       imageOpacity,
+      ditherScale,
+      ditherInvert,
     };
 
     setSavedPresets([...savedPresets, preset]);
@@ -971,6 +988,8 @@ export const GradientCanvas = () => {
     setDitherMode(preset.ditherMode);
     setDitherIntensity(preset.ditherIntensity);
     setImageOpacity(preset.imageOpacity);
+    setDitherScale(preset.ditherScale ?? 1.0);
+    setDitherInvert(preset.ditherInvert ?? false);
     saveToHistory(preset.points, preset.blur);
     toast.success(`Loaded preset "${preset.name}"`);
   };
@@ -1271,19 +1290,49 @@ export const GradientCanvas = () => {
             </div>
 
             {ditherMode !== "none" && (
-              <div>
-                <label className="text-xs text-muted-foreground block mb-2">
-                  Threshold: {ditherIntensity}
-                </label>
-                <Slider
-                  value={[ditherIntensity]}
-                  onValueChange={(v) => setDitherIntensity(v[0])}
-                  min={0}
-                  max={255}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Threshold: {ditherIntensity}
+                  </label>
+                  <Slider
+                    value={[ditherIntensity]}
+                    onValueChange={(v) => setDitherIntensity(v[0])}
+                    min={0}
+                    max={255}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Scale: {ditherScale.toFixed(2)}x
+                  </label>
+                  <Slider
+                    value={[ditherScale]}
+                    onValueChange={(v) => setDitherScale(v[0])}
+                    min={0.1}
+                    max={3.0}
+                    step={0.05}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">
+                    Invert Colors
+                  </label>
+                  <Button
+                    variant={ditherInvert ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setDitherInvert(!ditherInvert)}
+                    className="h-7 px-3 text-xs"
+                  >
+                    {ditherInvert ? "On" : "Off"}
+                  </Button>
+                </div>
+              </>
             )}
 
             <div>
