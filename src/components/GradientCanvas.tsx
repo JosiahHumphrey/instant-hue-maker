@@ -298,6 +298,8 @@ const BLEND_MODE_LABELS: Record<GlobalCompositeOperation, string> = {
 
 export const GradientCanvas = () => {
   const isMobile = useIsMobile();
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const isTablet = windowWidth >= 768 && windowWidth < 1280;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [points, setPoints] = useState<GradientPoint[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
@@ -349,6 +351,13 @@ export const GradientCanvas = () => {
   // Mobile sheet states
   const [leftSheetOpen, setLeftSheetOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
+
+  // Track window width for tablet detection
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Load state from localStorage on mount
   useEffect(() => {
@@ -824,13 +833,8 @@ export const GradientCanvas = () => {
       const tempCtx = tempCanvas.getContext('2d');
       
       if (tempCtx) {
-        // Apply scale to the image
-        const scaledWidth = canvas.width * ditherScale;
-        const scaledHeight = canvas.height * ditherScale;
-        const offsetX = (canvas.width - scaledWidth) / 2;
-        const offsetY = (canvas.height - scaledHeight) / 2;
-        
-        tempCtx.drawImage(uploadedImage, offsetX, offsetY, scaledWidth, scaledHeight);
+        // Draw the image at full size
+        tempCtx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
         
         // Apply image adjustments before dithering
         let imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
@@ -838,9 +842,30 @@ export const GradientCanvas = () => {
         tempCtx.putImageData(imageData, 0, 0);
         
         if (ditherMode !== "none") {
-          imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-          const dithered = applyDither(imageData, ditherMode, ditherIntensity);
-          tempCtx.putImageData(dithered, 0, 0);
+          // Apply dither scale by downsampling, dithering, then upsampling
+          const ditherWidth = Math.max(1, Math.floor(canvas.width / ditherScale));
+          const ditherHeight = Math.max(1, Math.floor(canvas.height / ditherScale));
+          
+          // Create downsampled canvas
+          const downsampleCanvas = document.createElement('canvas');
+          downsampleCanvas.width = ditherWidth;
+          downsampleCanvas.height = ditherHeight;
+          const downsampleCtx = downsampleCanvas.getContext('2d');
+          
+          if (downsampleCtx) {
+            // Downsample the image
+            downsampleCtx.drawImage(tempCanvas, 0, 0, ditherWidth, ditherHeight);
+            
+            // Apply dithering to downsampled image
+            let downsampledData = downsampleCtx.getImageData(0, 0, ditherWidth, ditherHeight);
+            const dithered = applyDither(downsampledData, ditherMode, ditherIntensity);
+            downsampleCtx.putImageData(dithered, 0, 0);
+            
+            // Upscale back to original size
+            tempCtx.imageSmoothingEnabled = false;
+            tempCtx.clearRect(0, 0, canvas.width, canvas.height);
+            tempCtx.drawImage(downsampleCanvas, 0, 0, canvas.width, canvas.height);
+          }
         }
         
         const ditherData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1440,14 +1465,14 @@ export const GradientCanvas = () => {
 
                 <div>
                   <label className="text-xs text-muted-foreground block mb-2">
-                    Scale: {ditherScale.toFixed(2)}x
+                    Pattern Resolution: {ditherScale.toFixed(2)}x
                   </label>
                   <Slider
                     value={[ditherScale]}
                     onValueChange={(v) => setDitherScale(v[0])}
-                    min={0.1}
-                    max={3.0}
-                    step={0.05}
+                    min={0.5}
+                    max={8.0}
+                    step={0.1}
                     className="w-full"
                   />
                 </div>
@@ -1945,17 +1970,38 @@ export const GradientCanvas = () => {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar - Desktop only */}
-        {!isMobile && (
+        {/* Left Sidebar - Desktop only, hidden on tablet */}
+        {!isMobile && !isTablet && (
           <div className="w-72 bg-card border-r border-border flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <LeftSidebarContent />
             </div>
           </div>
         )}
+        
+        {/* Tablet Left Sheet Trigger */}
+        {isTablet && (
+          <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
+            <SheetTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute left-4 top-20 z-10 bg-card border border-border shadow-lg"
+              >
+                <Palette className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80 overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Colors & Layers</SheetTitle>
+              </SheetHeader>
+              <LeftSidebarContent />
+            </SheetContent>
+          </Sheet>
+        )}
 
         {/* Center Canvas */}
-        <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2 md:p-8">
+        <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2 md:p-4 lg:p-8">
           <div 
             className="relative" 
             style={{ 
@@ -2008,13 +2054,34 @@ export const GradientCanvas = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Desktop only */}
-        {!isMobile && (
+        {/* Right Sidebar - Desktop only, hidden on tablet */}
+        {!isMobile && !isTablet && (
           <div className="w-72 bg-card border-l border-border flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <RightSidebarContent />
             </div>
           </div>
+        )}
+        
+        {/* Tablet Right Sheet Trigger */}
+        {isTablet && (
+          <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
+            <SheetTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-4 top-20 z-10 bg-card border border-border shadow-lg"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80 overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Settings</SheetTitle>
+              </SheetHeader>
+              <RightSidebarContent />
+            </SheetContent>
+          </Sheet>
         )}
       </div>
     </div>
