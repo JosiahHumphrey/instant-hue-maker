@@ -36,6 +36,7 @@ interface SavedPreset {
   imageLuminanceThreshold: number;
   imageHue: number;
   imageSaturation: number;
+  exportBackgroundColor: string | null;
 }
 
 interface CanvasPreset {
@@ -62,6 +63,7 @@ interface CanvasControlsProps {
   imageLuminanceThreshold: number;
   imageHue: number;
   imageSaturation: number;
+  exportBackgroundColor: string | null;
   
   // Right sidebar props
   canvasSize: CanvasPreset;
@@ -104,6 +106,7 @@ interface CanvasControlsProps {
   onSetImageLuminanceThreshold: (value: number) => void;
   onSetImageHue: (value: number) => void;
   onSetImageSaturation: (value: number) => void;
+  onSetExportBackgroundColor: (color: string | null) => void;
   onSetCanvasSize: (preset: CanvasPreset) => void;
   onUpdateBlur: (value: number) => void;
   onSetBlendMode: (mode: GlobalCompositeOperation) => void;
@@ -137,6 +140,7 @@ export const LeftSidebarContent = ({
   imageHue,
   imageSaturation,
   colorPalettes,
+  exportBackgroundColor,
   onLoadPreset,
   onExportPreset,
   onDeletePreset,
@@ -162,6 +166,7 @@ export const LeftSidebarContent = ({
   onSetImageSaturation,
   isMobile,
   onCloseSheet,
+  onSetExportBackgroundColor,
 }: Partial<CanvasControlsProps>) => (
   <div className="p-4 space-y-6">
     {savedPresets && savedPresets.length > 0 && (
@@ -533,6 +538,8 @@ export const RightSidebarContent = ({
   onSetNoiseOpacity,
   onSetNoiseDensity,
   onSetNoiseSharpness,
+  exportBackgroundColor,
+  onSetExportBackgroundColor,
 }: Partial<CanvasControlsProps>) => (
   <div className="p-4 space-y-6">
     <div>
@@ -754,6 +761,65 @@ export const RightSidebarContent = ({
           </div>
         </div>
       )}
+    </div>
+
+    <div className="pt-4 border-t border-border">
+      <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Export Settings</h2>
+      <div className="space-y-2">
+        <label className="text-xs font-medium">Solid Background</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={exportBackgroundColor || "#000000"}
+            onChange={(e) => onSetExportBackgroundColor?.(e.target.value)}
+            className="w-10 h-10 rounded cursor-pointer border-0"
+          />
+          <div className="flex-1 text-xs font-mono">
+            {exportBackgroundColor ? exportBackgroundColor.toUpperCase() : "None"}
+          </div>
+          {exportBackgroundColor && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onSetExportBackgroundColor?.(null)}
+              title="Clear background color"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div className="pt-4 border-t border-border">
+      <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Canvas Style</h2>
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-2">Background</label>
+          <div className="flex gap-2">
+            <input
+              type="color"
+              value={backgroundColor}
+              onChange={(e) => onUpdateBackgroundColor?.(e.target.value)}
+              className="w-12 h-9 rounded cursor-pointer border border-border"
+            />
+            <div className="flex-1 grid grid-cols-4 gap-1">
+              {["#ffffff", "#000000", "#f5f5f5", "#1a1a1a"].map((color) => (
+                <button
+                  key={color}
+                  onClick={() => onUpdateBackgroundColor?.(color)}
+                  className="h-9 rounded border-2 transition-all hover:scale-105"
+                  style={{
+                    backgroundColor: color,
+                    borderColor: backgroundColor === color ? "hsl(var(--primary))" : "hsl(var(--border))"
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 );

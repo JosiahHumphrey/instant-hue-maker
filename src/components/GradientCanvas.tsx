@@ -306,8 +306,10 @@ export const GradientCanvas = () => {
   const [noiseEnabled, setNoiseEnabled] = useState(true);
   const [noiseOpacity, setNoiseOpacity] = useState(20);
   const [noiseDensity, setNoiseDensity] = useState(20);
-  const [noiseSharpness, setNoiseSharpness] = useState(2.0);
-  
+  const [noiseSharpness, setNoiseSharpness] = useState(40);
+
+  const [exportBackgroundColor, setExportBackgroundColor] = useState<string | null>(null);
+
   // Blend mode
   const [blendMode, setBlendMode] = useState<GlobalCompositeOperation>("source-over");
   
@@ -801,45 +803,51 @@ export const GradientCanvas = () => {
 
   const exportCanvas = async (format: "png" | "svg") => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const { width, height } = canvas;
 
     if (format === "png") {
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `gradient-${Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success("PNG downloaded!");
-      });
-    } else {
-      // SVG export - create gradient definitions
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasSize.width}" height="${canvasSize.height}">
-        <defs>
-          ${points
-            .map(
-              (p, i) => `
-            <radialGradient id="grad${i}" cx="${p.x * 100}%" cy="${p.y * 100}%">
-              <stop offset="0%" style="stop-color:${p.color};stop-opacity:1" />
-              <stop offset="100%" style="stop-color:${p.color};stop-opacity:0" />
-            </radialGradient>
-          `
-            )
-            .join("")}
-        </defs>
-        <rect width="100%" height="100%" fill="white"/>
-        ${points
-          .map(
-            (p, i) => `
-          <rect width="100%" height="100%" fill="url(#grad${i})" filter="blur(${blur}px)"/>
-        `
-          )
-          .join("")}
-      </svg>`;
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext("2d");
 
-      const blob = new Blob([svg], { type: "image/svg+xml" });
+      if (tempCtx) {
+        if (exportBackgroundColor) {
+          tempCtx.fillStyle = exportBackgroundColor;
+          tempCtx.fillRect(0, 0, width, height);
+        }
+        tempCtx.drawImage(canvas, 0, 0);
+      }
+      
+      const dataUrl = tempCanvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = "gradient.png";
+      link.href = dataUrl;
+      link.click();
+      toast.success("Exported as PNG!");
+    } else if (format === "svg") {
+      // SVG export - create gradient definitions
+      let svgString = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+
+      if (exportBackgroundColor) {
+        svgString += `<rect width="100%" height="100%" fill="${exportBackgroundColor}" />`;
+      }
+
+      svgString += `<defs><filter id="blur" x="-200%" y="-200%" width="800%" height="800%"><feGaussianBlur stdDeviation="${blur}" /></filter></defs>`;
+      
+      // Create a group for the gradient layers with the blur filter and blend mode
+      svgString += `<g filter="url(#blur)" blend-mode="${blendMode}">`;
+      points.forEach((point, i) => {
+        svgString += `
+          <radialGradient id="grad${i}" cx="${point.x * 100}%" cy="${point.y * 100}%">
+            <stop offset="0%" style="stop-color:${point.color};stop-opacity:1" />
+            <stop offset="100%" style="stop-color:${point.color};stop-opacity:0" />
+          </radialGradient>
+        `;
+      });
+      svgString += `</g>`;
+
+      const blob = new Blob([svgString], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -909,8 +917,8 @@ export const GradientCanvas = () => {
                   onSetImageLuminanceThreshold={setImageLuminanceThreshold}
                   onSetImageHue={setImageHue}
                   onSetImageSaturation={setImageSaturation}
-                  isMobile={isMobile}
-                  onCloseSheet={() => setLeftSheetOpen(false)}
+                  exportBackgroundColor={exportBackgroundColor}
+                  onSetExportBackgroundColor={setExportBackgroundColor}
                 />
               </SheetContent>
             </Sheet>
@@ -1004,15 +1012,15 @@ export const GradientCanvas = () => {
                     onUpdateBlur={updateBlur}
                     onSetBlendMode={setBlendMode}
                     onUpdateGradientSpread={updateGradientSpread}
-                    onUpdateBackgroundColor={updateBackgroundColor}
+                    onUpdateBackgroundColor={setBackgroundColor}
                     onUpdateFadeEndpoint={updateFadeEndpoint}
                     onApplyEdgePreset={applyEdgePreset}
                     onSetNoiseEnabled={setNoiseEnabled}
                     onSetNoiseOpacity={setNoiseOpacity}
                     onSetNoiseDensity={setNoiseDensity}
                     onSetNoiseSharpness={setNoiseSharpness}
-                    isMobile={isMobile}
-                    onCloseSheet={() => setRightSheetOpen(false)}
+                    exportBackgroundColor={exportBackgroundColor}
+                    onSetExportBackgroundColor={setExportBackgroundColor}
                   />
                 </SheetContent>
               </Sheet>
@@ -1086,6 +1094,8 @@ export const GradientCanvas = () => {
                 onSetImageLuminanceThreshold={setImageLuminanceThreshold}
                 onSetImageHue={setImageHue}
                 onSetImageSaturation={setImageSaturation}
+                exportBackgroundColor={exportBackgroundColor}
+                onSetExportBackgroundColor={setExportBackgroundColor}
               />
             </div>
           </div>
@@ -1150,6 +1160,8 @@ export const GradientCanvas = () => {
                   onSetImageSaturation={setImageSaturation}
                   isMobile={isMobile}
                   onCloseSheet={() => setLeftSheetOpen(false)}
+                  exportBackgroundColor={exportBackgroundColor}
+                  onSetExportBackgroundColor={setExportBackgroundColor}
                 />
               </SheetContent>
             </Sheet>
@@ -1243,13 +1255,15 @@ export const GradientCanvas = () => {
                 onUpdateBlur={updateBlur}
                 onSetBlendMode={setBlendMode}
                 onUpdateGradientSpread={updateGradientSpread}
-                onUpdateBackgroundColor={updateBackgroundColor}
+                onUpdateBackgroundColor={setBackgroundColor}
                 onUpdateFadeEndpoint={updateFadeEndpoint}
                 onApplyEdgePreset={applyEdgePreset}
                 onSetNoiseEnabled={setNoiseEnabled}
                 onSetNoiseOpacity={setNoiseOpacity}
                 onSetNoiseDensity={setNoiseDensity}
                 onSetNoiseSharpness={setNoiseSharpness}
+                exportBackgroundColor={exportBackgroundColor}
+                onSetExportBackgroundColor={setExportBackgroundColor}
               />
             </div>
           </div>
@@ -1290,7 +1304,7 @@ export const GradientCanvas = () => {
                 onUpdateBlur={updateBlur}
                 onSetBlendMode={setBlendMode}
                 onUpdateGradientSpread={updateGradientSpread}
-                onUpdateBackgroundColor={updateBackgroundColor}
+                onUpdateBackgroundColor={setBackgroundColor}
                 onUpdateFadeEndpoint={updateFadeEndpoint}
                 onApplyEdgePreset={applyEdgePreset}
                 onSetNoiseEnabled={setNoiseEnabled}
@@ -1299,6 +1313,8 @@ export const GradientCanvas = () => {
                 onSetNoiseSharpness={setNoiseSharpness}
                 isMobile={isMobile}
                 onCloseSheet={() => setRightSheetOpen(false)}
+                exportBackgroundColor={exportBackgroundColor}
+                onSetExportBackgroundColor={setExportBackgroundColor}
               />
             </SheetContent>
           </Sheet>
