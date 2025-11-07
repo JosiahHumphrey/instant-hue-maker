@@ -40,3 +40,55 @@
 .read-the-docs {
   color: #888;
 }
+
+.glass-card {
+  @apply bg-card/60 backdrop-blur-xl border border-white/20 rounded-lg shadow-lg;
+}
+
+.glass-button {
+  @apply bg-primary/20 backdrop-blur-lg border border-white/10 rounded-md text-primary-foreground hover:bg-primary/30;
+}
+
+.glass-sheet {
+  @apply bg-card/60 backdrop-blur-2xl border-l border-white/20;
+}
+
+.glass-input {
+  @apply bg-black/20 backdrop-blur-sm border-white/10 rounded-md;
+}
+
+.glass-popover {
+  @apply bg-popover/80 backdrop-blur-lg border border-white/20 rounded-lg;
+}
+
+.glass-dialog {
+  @apply bg-card/70 backdrop-blur-xl border border-white/20 rounded-lg;
+}
+
+.glass-tooltip {
+  @apply bg-gray-900/80 backdrop-blur-md text-white rounded-md px-2 py-1 text-xs;
+}
+
+.glass-slider-track {
+  @apply bg-primary/20 backdrop-blur-sm;
+}
+
+.glass-slider-thumb {
+  @apply bg-primary border-2 border-primary-foreground;
+}
+
+.glass-switch-thumb {
+  @apply bg-primary-foreground;
+}
+
+.glass-switch-track {
+  @apply bg-primary/30;
+}
+
+.glass-select-trigger {
+  @apply bg-black/20 backdrop-blur-sm border-white/10 rounded-md;
+}
+
+.glass-select-content {
+  @apply bg-popover/80 backdrop-blur-lg border border-white/20 rounded-lg;
+}

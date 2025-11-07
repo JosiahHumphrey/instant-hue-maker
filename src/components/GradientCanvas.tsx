@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CanvasRenderer } from "./CanvasRenderer";
+import { ModeToggle } from "./mode-toggle";
 import { LeftSidebarContent, RightSidebarContent } from "./CanvasControls";
 
 interface GradientPoint {
@@ -854,7 +855,7 @@ export const GradientCanvas = () => {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Toolbar */}
-      <div className="h-14 bg-card border-b border-border flex items-center justify-between px-2 md:px-4">
+      <div className="h-14 glass-card flex items-center justify-between px-2 md:px-4">
         <div className="flex items-center gap-2">
           {isMobile && (
             <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
@@ -968,6 +969,7 @@ export const GradientCanvas = () => {
 
         {/* Export & Presets */}
         <div className="flex items-center gap-1 md:gap-2">
+          <ModeToggle />
           {isMobile ? (
             <>
               <Button onClick={() => exportCanvas("png")} variant="default" size="icon">
@@ -1041,7 +1043,7 @@ export const GradientCanvas = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar - Desktop only, hidden on tablet */}
         {!isMobile && !isTablet && (
-          <div className="w-72 bg-card border-r border-border flex flex-col">
+          <div className="w-72 glass-card flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <LeftSidebarContent
                 savedPresets={savedPresets}
@@ -1220,7 +1222,7 @@ export const GradientCanvas = () => {
 
         {/* Right Sidebar - Desktop only, hidden on tablet */}
         {!isMobile && !isTablet && (
-          <div className="w-72 bg-card border-l border-border flex flex-col">
+          <div className="w-72 glass-card flex flex-col">
             <div className="flex-1 overflow-y-auto">
               <RightSidebarContent
                 canvasSize={canvasSize}
