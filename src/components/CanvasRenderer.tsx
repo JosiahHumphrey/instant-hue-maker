@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, memo } from "react";
+import { useEffect, useRef, useCallback, memo, forwardRef, useImperativeHandle } from "react";
 import { useThrottledValue } from "@/hooks/useThrottledValue";
 
 type DitherMode = "none" | "floyd-steinberg" | "bayer-2x2" | "bayer-4x4" | "bayer-8x8" | "atkinson";
@@ -10,7 +10,7 @@ interface GradientPoint {
   color: string;
 }
 
-interface CanvasRendererProps {
+export interface CanvasRendererProps {
   points: GradientPoint[];
   blur: number;
   canvasWidth: number;
@@ -36,9 +36,16 @@ interface CanvasRendererProps {
   imageLuminanceThreshold: number;
   imageHue: number;
   imageSaturation: number;
+  onMouseDown?: React.MouseEventHandler<HTMLCanvasElement>;
+  onMouseMove?: React.MouseEventHandler<HTMLCanvasElement>;
+  onMouseUp?: React.MouseEventHandler<HTMLCanvasElement>;
+  onMouseLeave?: React.MouseEventHandler<HTMLCanvasElement>;
+  onTouchStart?: React.TouchEventHandler<HTMLCanvasElement>;
+  onTouchMove?: React.TouchEventHandler<HTMLCanvasElement>;
+  onTouchEnd?: React.TouchEventHandler<HTMLCanvasElement>;
 }
 
-export const CanvasRenderer = memo(({ 
+export const CanvasRenderer = memo(forwardRef<HTMLCanvasElement, CanvasRendererProps>(({ 
   points,
   blur,
   canvasWidth,
@@ -64,8 +71,16 @@ export const CanvasRenderer = memo(({
   imageLuminanceThreshold,
   imageHue,
   imageSaturation,
-}: CanvasRendererProps) => {
+  onMouseDown,
+  onMouseMove,
+  onMouseUp,
+  onMouseLeave,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  useImperativeHandle(ref, () => canvasRef.current!);
 
   // Throttle heavy operations for canvas rendering
   const throttledBlur = useThrottledValue(blur, 50);
@@ -484,7 +499,17 @@ export const CanvasRenderer = memo(({
     applyImageAdjustments,
   ]);
 
-  return <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto' }} />;
-});
+  return <canvas 
+    ref={canvasRef} 
+    style={{ display: 'block', width: '100%', height: 'auto' }}
+    onMouseDown={onMouseDown}
+    onMouseMove={onMouseMove}
+    onMouseUp={onMouseUp}
+    onMouseLeave={onMouseLeave}
+    onTouchStart={onTouchStart}
+    onTouchMove={onTouchMove}
+    onTouchEnd={onTouchEnd}
+  />;
+}));
 
 CanvasRenderer.displayName = "CanvasRenderer";

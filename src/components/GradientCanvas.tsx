@@ -513,30 +513,6 @@ export const GradientCanvas = () => {
   }, []);
 
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDragging) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-
-    // Check if clicked near existing point
-    const clickedPoint = points.find((p) => {
-      const dx = Math.abs(p.x - x) * rect.width;
-      const dy = Math.abs(p.y - y) * rect.height;
-      return Math.sqrt(dx * dx + dy * dy) < 30;
-    });
-
-    if (clickedPoint) {
-      setSelectedPoint(clickedPoint.id);
-    } else {
-      setSelectedPoint(null);
-    }
-  };
-
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -573,7 +549,56 @@ export const GradientCanvas = () => {
   };
 
   const handleMouseUp = () => {
-    setIsDragging(false);
+    if (isDragging) {
+      saveToHistory(points, blur);
+      setIsDragging(false);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = (touch.clientX - rect.left) / rect.width;
+    const y = (touch.clientY - rect.top) / rect.height;
+
+    const clickedPoint = points.find((p) => {
+      const dx = Math.abs(p.x - x) * rect.width;
+      const dy = Math.abs(p.y - y) * rect.height;
+      return Math.sqrt(dx * dx + dy * dy) < 30; // 30px touch radius
+    });
+
+    if (clickedPoint) {
+      setSelectedPoint(clickedPoint.id);
+      setIsDragging(true);
+    } else {
+      setSelectedPoint(null);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDragging || !selectedPoint) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
+
+    setPoints((prev) =>
+      prev.map((p) => (p.id === selectedPoint ? { ...p, x, y } : p))
+    );
+  };
+
+  const handleTouchEnd = () => {
+    if (isDragging) {
+      saveToHistory(points, blur);
+      setIsDragging(false);
+    }
   };
 
   const addPoint = () => {
@@ -1093,31 +1118,14 @@ export const GradientCanvas = () => {
                 imageLuminanceThreshold={imageLuminanceThreshold}
                 imageHue={imageHue}
                 imageSaturation={imageSaturation}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
               />
-              <div
-              ref={canvasRef}
-              onClick={handleCanvasClick}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onTouchStart={(e) => {
-                const touch = e.touches[0];
-                const rect = canvasRef.current?.getBoundingClientRect();
-                if (rect) {
-                  const x = (touch.clientX - rect.left) / rect.width;
-                  const y = (touch.clientY - rect.top) / rect.height;
-                  handleCanvasClick({ nativeEvent: { offsetX: x * rect.width, offsetY: y * rect.height } } as any);
-                }
-              }}
-              className="rounded-lg shadow-2xl cursor-crosshair border border-border bg-background touch-none"
-              style={{ 
-                maxWidth: '100%', 
-                maxHeight: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 200px)',
-                width: isMobile ? '100%' : 'auto',
-                height: isMobile ? 'auto' : 'auto'
-              }}
-            />
             {/* Point indicators */}
             {points.map((point) => (
               <div
