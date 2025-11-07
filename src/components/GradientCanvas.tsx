@@ -867,7 +867,50 @@ export const GradientCanvas = () => {
                 <SheetHeader>
                   <SheetTitle>Colors & Layers</SheetTitle>
                 </SheetHeader>
-                <LeftSidebarContent />
+                <LeftSidebarContent
+                  savedPresets={savedPresets}
+                  points={points}
+                  selectedPoint={selectedPoint}
+                  uploadedImage={uploadedImage}
+                  ditherMode={ditherMode}
+                  ditherIntensity={ditherIntensity}
+                  ditherScale={ditherScale}
+                  ditherInvert={ditherInvert}
+                  imageOpacity={imageOpacity}
+                  imageContrast={imageContrast}
+                  imageBrightness={imageBrightness}
+                  imageMidtones={imageMidtones}
+                  imageHighlights={imageHighlights}
+                  imageLuminanceThreshold={imageLuminanceThreshold}
+                  imageHue={imageHue}
+                  imageSaturation={imageSaturation}
+                  colorPalettes={COLOR_PALETTES}
+                  onLoadPreset={loadPreset}
+                  onExportPreset={exportPresetToFile}
+                  onDeletePreset={deletePreset}
+                  onApplyPalette={applyPalette}
+                  onRandomizePositions={randomizePositions}
+                  onSetSelectedPoint={setSelectedPoint}
+                  onUpdatePointColor={updatePointColor}
+                  onRemovePoint={removePoint}
+                  onAddPoint={addPoint}
+                  onImageUpload={handleImageUpload}
+                  onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
+                  onSetDitherMode={setDitherMode}
+                  onSetDitherIntensity={setDitherIntensity}
+                  onSetDitherScale={setDitherScale}
+                  onSetDitherInvert={setDitherInvert}
+                  onSetImageOpacity={setImageOpacity}
+                  onSetImageContrast={setImageContrast}
+                  onSetImageBrightness={setImageBrightness}
+                  onSetImageMidtones={setImageMidtones}
+                  onSetImageHighlights={setImageHighlights}
+                  onSetImageLuminanceThreshold={setImageLuminanceThreshold}
+                  onSetImageHue={setImageHue}
+                  onSetImageSaturation={setImageSaturation}
+                  isMobile={isMobile}
+                  onCloseSheet={() => setLeftSheetOpen(false)}
+                />
               </SheetContent>
             </Sheet>
           )}
@@ -940,7 +983,35 @@ export const GradientCanvas = () => {
                   <SheetHeader>
                     <SheetTitle>Settings</SheetTitle>
                   </SheetHeader>
-                  <RightSidebarContent />
+                  <RightSidebarContent
+                    canvasSize={canvasSize}
+                    canvasPresets={CANVAS_PRESETS}
+                    blur={blur}
+                    blendMode={blendMode}
+                    blendModes={BLEND_MODES}
+                    blendModeLabels={BLEND_MODE_LABELS}
+                    gradientSpread={gradientSpread}
+                    backgroundColor={backgroundColor}
+                    fadeEndpoint={fadeEndpoint}
+                    edgePresets={EDGE_PRESETS}
+                    noiseEnabled={noiseEnabled}
+                    noiseOpacity={noiseOpacity}
+                    noiseDensity={noiseDensity}
+                    noiseSharpness={noiseSharpness}
+                    onSetCanvasSize={setCanvasSize}
+                    onUpdateBlur={updateBlur}
+                    onSetBlendMode={setBlendMode}
+                    onUpdateGradientSpread={updateGradientSpread}
+                    onUpdateBackgroundColor={updateBackgroundColor}
+                    onUpdateFadeEndpoint={updateFadeEndpoint}
+                    onApplyEdgePreset={applyEdgePreset}
+                    onSetNoiseEnabled={setNoiseEnabled}
+                    onSetNoiseOpacity={setNoiseOpacity}
+                    onSetNoiseDensity={setNoiseDensity}
+                    onSetNoiseSharpness={setNoiseSharpness}
+                    isMobile={isMobile}
+                    onCloseSheet={() => setRightSheetOpen(false)}
+                  />
                 </SheetContent>
               </Sheet>
             </>
@@ -1198,7 +1269,35 @@ export const GradientCanvas = () => {
               <SheetHeader>
                 <SheetTitle>Settings</SheetTitle>
               </SheetHeader>
-              <RightSidebarContent />
+              <RightSidebarContent
+                canvasSize={canvasSize}
+                canvasPresets={CANVAS_PRESETS}
+                blur={blur}
+                blendMode={blendMode}
+                blendModes={BLEND_MODES}
+                blendModeLabels={BLEND_MODE_LABELS}
+                gradientSpread={gradientSpread}
+                backgroundColor={backgroundColor}
+                fadeEndpoint={fadeEndpoint}
+                edgePresets={EDGE_PRESETS}
+                noiseEnabled={noiseEnabled}
+                noiseOpacity={noiseOpacity}
+                noiseDensity={noiseDensity}
+                noiseSharpness={noiseSharpness}
+                onSetCanvasSize={setCanvasSize}
+                onUpdateBlur={updateBlur}
+                onSetBlendMode={setBlendMode}
+                onUpdateGradientSpread={updateGradientSpread}
+                onUpdateBackgroundColor={updateBackgroundColor}
+                onUpdateFadeEndpoint={updateFadeEndpoint}
+                onApplyEdgePreset={applyEdgePreset}
+                onSetNoiseEnabled={setNoiseEnabled}
+                onSetNoiseOpacity={setNoiseOpacity}
+                onSetNoiseDensity={setNoiseDensity}
+                onSetNoiseSharpness={setNoiseSharpness}
+                isMobile={isMobile}
+                onCloseSheet={() => setRightSheetOpen(false)}
+              />
             </SheetContent>
           </Sheet>
         )}
