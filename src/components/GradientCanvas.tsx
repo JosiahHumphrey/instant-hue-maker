@@ -7,48 +7,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { CanvasRenderer } from "./CanvasRenderer";
 import { ModeToggle } from "./mode-toggle";
 import { LeftSidebarContent, RightSidebarContent } from "./CanvasControls";
-
-interface GradientPoint {
-  id: string;
-  x: number;
-  y: number;
-  color: string;
-}
-
-interface CanvasState {
-  points: GradientPoint[];
-  blur: number;
-  gradientSpread?: number;
-  backgroundColor?: string;
-  fadeEndpoint?: number;
-}
-
-type DitherMode = "none" | "floyd-steinberg" | "bayer-2x2" | "bayer-4x4" | "bayer-8x8" | "atkinson";
+import { GradientLayer, GradientPoint, DitherMode } from "@/types";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface SavedPreset {
   name: string;
-  points: GradientPoint[];
-  blur: number;
-  gradientSpread: number;
-  backgroundColor: string;
-  fadeEndpoint: number;
-  blendMode: GlobalCompositeOperation;
-  noiseEnabled: boolean;
-  noiseOpacity: number;
-  noiseDensity: number;
-  noiseSharpness: number;
-  ditherMode: DitherMode;
-  ditherIntensity: number;
-  imageOpacity: number;
-  ditherScale: number;
-  ditherInvert: boolean;
-  imageContrast: number;
-  imageBrightness: number;
-  imageMidtones: number;
-  imageHighlights: number;
-  imageLuminanceThreshold: number;
-  imageHue: number;
-  imageSaturation: number;
+  layers: GradientLayer[];
 }
 
 const COLOR_PALETTES = {
@@ -220,6 +184,43 @@ const COLOR_PALETTES = {
   "Reggae Vibes": ["#006400", "#ffd700", "#ff0000", "#ffa500", "#228b22"],
 };
 
+const createNewLayer = (name: string, existingLayers: GradientLayer[]): GradientLayer => {
+  const defaultPoints: GradientPoint[] = [
+    { id: `p${Date.now()}-1`, x: 0.25, y: 0.3, color: DEFAULT_COLORS[0] },
+    { id: `p${Date.now()}-2`, x: 0.5, y: 0.15, color: DEFAULT_COLORS[1] },
+    { id: `p${Date.now()}-3`, x: 0.75, y: 0.5, color: DEFAULT_COLORS[3] },
+  ];
+
+  return {
+    id: `layer-${Date.now()}-${existingLayers.length}`,
+    name: name,
+    points: defaultPoints,
+    blur: 120,
+    gradientSpread: 0.6,
+    backgroundColor: "#ffffff",
+    fadeEndpoint: 1.0,
+    blendMode: "source-over",
+    opacity: 1,
+    noiseEnabled: true,
+    noiseOpacity: 20,
+    noiseDensity: 20,
+    noiseSharpness: 2.0,
+    ditherMode: "none",
+    ditherIntensity: 128,
+    imageOpacity: 100,
+    ditherScale: 1.0,
+    ditherInvert: false,
+    imageContrast: 0,
+    imageBrightness: 0,
+    imageMidtones: 0,
+    imageHighlights: 0,
+    imageLuminanceThreshold: 127,
+    imageHue: 0,
+    imageSaturation: 0,
+    isVisible: true,
+  };
+};
+
 const CANVAS_PRESETS = [
   { name: "16:9", width: 1600, height: 900 },
   { name: "1:1", width: 1000, height: 1000 },
@@ -296,56 +297,69 @@ export const GradientCanvas = () => {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const isTablet = windowWidth >= 768 && windowWidth < 1280;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [points, setPoints] = useState<GradientPoint[]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
-  const [blur, setBlur] = useState(120);
+  
+  const [layers, setLayers] = useState<GradientLayer[]>([]);
+  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
+
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState(CANVAS_PRESETS[0]);
   const [isDragging, setIsDragging] = useState(false);
   
-  // Noise settings
-  const [noiseEnabled, setNoiseEnabled] = useState(true);
-  const [noiseOpacity, setNoiseOpacity] = useState(20);
-  const [noiseDensity, setNoiseDensity] = useState(20);
-  const [noiseSharpness, setNoiseSharpness] = useState(2.0);
-  
-  // Blend mode
-  const [blendMode, setBlendMode] = useState<GlobalCompositeOperation>("source-over");
-  
-  // Edge control settings
-  const [gradientSpread, setGradientSpread] = useState(0.6);
-  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
-  const [fadeEndpoint, setFadeEndpoint] = useState(1.0);
-  
-  // Image & Dither settings
-  const [uploadedImage, setUploadedImage] = useState<HTMLImageElement | null>(null);
-  const [ditherMode, setDitherMode] = useState<DitherMode>("none");
-  const [ditherIntensity, setDitherIntensity] = useState(128);
-  const [imageOpacity, setImageOpacity] = useState(100);
-  const [ditherScale, setDitherScale] = useState(1.0);
-  const [ditherInvert, setDitherInvert] = useState(false);
-  
-  // Advanced image adjustments
-  const [imageContrast, setImageContrast] = useState(0);
-  const [imageBrightness, setImageBrightness] = useState(0);
-  const [imageMidtones, setImageMidtones] = useState(0);
-  const [imageHighlights, setImageHighlights] = useState(0);
-  const [imageLuminanceThreshold, setImageLuminanceThreshold] = useState(127);
-  const [imageHue, setImageHue] = useState(0);
-  const [imageSaturation, setImageSaturation] = useState(0);
-  
   // Zoom state
   const [zoom, setZoom] = useState(100);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const lastPanPoint = useRef({ x: 0, y: 0 });
   
   // Saved presets
   const [savedPresets, setSavedPresets] = useState<SavedPreset[]>([]);
   
   // Undo/Redo state
-  const [history, setHistory] = useState<CanvasState[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Canvas Resolution
+  const [canvasWidth, setCanvasWidth] = useState(1600);
+  const [canvasHeight, setCanvasHeight] = useState(900);
 
   // Mobile sheet states
   const [leftSheetOpen, setLeftSheetOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
+
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  const activeLayer = layers.find(l => l.id === activeLayerId);
+
+  const saveToHistory = useCallback((
+    newLayers: GradientLayer[],
+    newActiveLayerId: string | null
+  ) => {
+    const newState = { 
+      layers: newLayers,
+      activeLayerId: newActiveLayerId
+    };
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newState);
+    // Keep only last 50 states
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    }
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  }, [history, historyIndex]);
+
+  const onSave = useCallback(() => {
+    saveToHistory(layers, activeLayerId);
+  }, [layers, activeLayerId, saveToHistory]);
+
+  const updateLayer = (layerId: string, updater: (layer: GradientLayer) => GradientLayer) => {
+    setLayers(currentLayers => currentLayers.map(l => l.id === layerId ? updater(l) : l));
+  };
+
+  const updateActiveLayer = (props: Partial<GradientLayer>) => {
+    if (!activeLayerId) return;
+    updateLayer(activeLayerId, l => ({ ...l, ...props }));
+  };
 
   // Track window width for tablet detection
   useEffect(() => {
@@ -354,23 +368,29 @@ export const GradientCanvas = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Initialize with a default layer
+  useEffect(() => {
+    if (layers.length > 0) return;
+    const defaultLayer = createNewLayer("Background", []);
+    setLayers([defaultLayer]);
+    setActiveLayerId(defaultLayer.id);
+    saveToHistory([defaultLayer], defaultLayer.id);
+  }, []);
+
+
   // Load state from localStorage on mount
   useEffect(() => {
     const savedState = localStorage.getItem('gradientCanvasState');
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
-        if (parsed.points) setPoints(parsed.points);
-        if (parsed.blur !== undefined) setBlur(parsed.blur);
-        if (parsed.gradientSpread !== undefined) setGradientSpread(parsed.gradientSpread);
-        if (parsed.backgroundColor) setBackgroundColor(parsed.backgroundColor);
-        if (parsed.fadeEndpoint !== undefined) setFadeEndpoint(parsed.fadeEndpoint);
-        if (parsed.blendMode) setBlendMode(parsed.blendMode);
-        if (parsed.noiseEnabled !== undefined) setNoiseEnabled(parsed.noiseEnabled);
-        if (parsed.noiseOpacity !== undefined) setNoiseOpacity(parsed.noiseOpacity);
-        if (parsed.noiseDensity !== undefined) setNoiseDensity(parsed.noiseDensity);
-        if (parsed.noiseSharpness !== undefined) setNoiseSharpness(parsed.noiseSharpness);
-        toast.success("Previous session restored!");
+        if (parsed.layers && parsed.layers.length > 0) {
+          setLayers(parsed.layers);
+          setActiveLayerId(parsed.activeLayerId || parsed.layers[0].id);
+          // Set initial history state after loading
+          saveToHistory(parsed.layers, parsed.activeLayerId || parsed.layers[0].id);
+          toast.success("Previous session restored!");
+        }
       } catch (e) {
         console.error("Failed to load saved state", e);
       }
@@ -388,51 +408,18 @@ export const GradientCanvas = () => {
 
   // Save state to localStorage whenever it changes
   useEffect(() => {
+    if (historyIndex < 1) return; // Don't save initial state from load
     const stateToSave = {
-      points,
-      blur,
-      gradientSpread,
-      backgroundColor,
-      fadeEndpoint,
-      blendMode,
-      noiseEnabled,
-      noiseOpacity,
-      noiseDensity,
-      noiseSharpness,
+      layers,
+      activeLayerId,
     };
     localStorage.setItem('gradientCanvasState', JSON.stringify(stateToSave));
-  }, [points, blur, gradientSpread, backgroundColor, fadeEndpoint, blendMode, noiseEnabled, noiseOpacity, noiseDensity, noiseSharpness]);
+  }, [layers, activeLayerId]);
 
   // Save presets to localStorage
   useEffect(() => {
     localStorage.setItem('gradientCanvasPresets', JSON.stringify(savedPresets));
   }, [savedPresets]);
-
-  // Save state to history
-  const saveToHistory = useCallback((
-    newPoints: GradientPoint[], 
-    newBlur: number,
-    newSpread?: number,
-    newBgColor?: string,
-    newFadeEnd?: number
-  ) => {
-    const newState: CanvasState = { 
-      points: newPoints, 
-      blur: newBlur,
-      gradientSpread: newSpread ?? gradientSpread,
-      backgroundColor: newBgColor ?? backgroundColor,
-      fadeEndpoint: newFadeEnd ?? fadeEndpoint,
-    };
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newState);
-    // Keep only last 50 states
-    if (newHistory.length > 50) {
-      newHistory.shift();
-    } else {
-      setHistoryIndex(historyIndex + 1);
-    }
-    setHistory(newHistory);
-  }, [history, historyIndex, gradientSpread, backgroundColor, fadeEndpoint]);
 
   // Undo function
   const undo = useCallback(() => {
@@ -440,12 +427,9 @@ export const GradientCanvas = () => {
       const newIndex = historyIndex - 1;
       setHistoryIndex(newIndex);
       const state = history[newIndex];
-      setPoints(state.points);
-      setBlur(state.blur);
-      if (state.gradientSpread !== undefined) setGradientSpread(state.gradientSpread);
-      if (state.backgroundColor !== undefined) setBackgroundColor(state.backgroundColor);
-      if (state.fadeEndpoint !== undefined) setFadeEndpoint(state.fadeEndpoint);
-      toast.success("Undone");
+      setLayers(state.layers);
+      setActiveLayerId(state.activeLayerId);
+      toast.info("Undone");
     }
   }, [history, historyIndex]);
 
@@ -455,12 +439,9 @@ export const GradientCanvas = () => {
       const newIndex = historyIndex + 1;
       setHistoryIndex(newIndex);
       const state = history[newIndex];
-      setPoints(state.points);
-      setBlur(state.blur);
-      if (state.gradientSpread !== undefined) setGradientSpread(state.gradientSpread);
-      if (state.backgroundColor !== undefined) setBackgroundColor(state.backgroundColor);
-      if (state.fadeEndpoint !== undefined) setFadeEndpoint(state.fadeEndpoint);
-      toast.success("Redone");
+      setLayers(state.layers);
+      setActiveLayerId(state.activeLayerId);
+      toast.info("Redone");
     }
   }, [history, historyIndex]);
 
@@ -480,7 +461,7 @@ export const GradientCanvas = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
-  // Initialize with default gradient points
+  /*
   useEffect(() => {
     const initialPoints: GradientPoint[] = [
       { id: "1", x: 0.25, y: 0.3, color: DEFAULT_COLORS[0] },
@@ -492,818 +473,433 @@ export const GradientCanvas = () => {
     setPoints(initialPoints);
     saveToHistory(initialPoints, 120);
   }, []);
+  */
 
+  const downloadImage = () => {
+    const mainCanvas = canvasRef.current;
+    if (mainCanvas) {
+      const link = document.createElement('a');
+      link.download = 'instant-hue.png';
+      link.href = mainCanvas.toDataURL('image/png');
+      link.click();
+      toast.success("Image downloaded!");
+    } else {
+      toast.error("Canvas not available for download.");
+    }
+  };
 
+  const savePreset = (name: string) => {
+    if (!name) {
+      toast.error("Please enter a name for the preset.");
+      return;
+    }
+    const newPreset: SavedPreset = { name, layers };
+    setSavedPresets(prev => [...prev, newPreset]);
+    toast.success(`Preset "${name}" saved!`);
+  };
+
+  const loadPreset = (preset: SavedPreset) => {
+    setLayers(preset.layers);
+    setActiveLayerId(preset.layers[0]?.id || null);
+    onSave();
+    toast.success(`Preset "${preset.name}" loaded!`);
+  };
+
+  const deletePreset = (name: string) => {
+    setSavedPresets(prev => prev.filter(p => p.name !== name));
+    toast.success(`Preset "${name}" deleted.`);
+  };
 
 
   // Handle image upload
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        setUploadedImage(img);
-        toast.success("Image uploaded!");
+    if (!activeLayerId) {
+      toast.error("Please select a layer first.");
+      return;
+    }
+    if (e.target.files && e.target.files[0]) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const imageUrl = event.target.result as string;
+          updateLayer(activeLayerId, l => ({ ...l, uploadedImage: imageUrl }));
+          toast.success("Image uploaded successfully!");
+          onSave();
+        }
       };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  }, []);
+      reader.readAsDataURL(e.target.files[0]);
+    }
+  }, [activeLayerId, onSave]);
 
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.buttons === 1 && (e.metaKey || e.ctrlKey || e.altKey)) { // check for spacebar alternative
+      setIsPanning(true);
+      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+      document.body.style.cursor = 'grabbing';
+      return;
+    }
+    if (!canvasRef.current || !activeLayer) return;
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
+    const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
-    const clickedPoint = points.find((p) => {
-      const dx = Math.abs(p.x - x) * rect.width;
-      const dy = Math.abs(p.y - y) * rect.height;
-      return Math.sqrt(dx * dx + dy * dy) < 30;
-    });
-
-    if (clickedPoint) {
-      setSelectedPoint(clickedPoint.id);
-      setIsDragging(true);
+    for (const point of activeLayer.points) {
+      const dx = x - point.x;
+      const dy = y - point.y;
+      if (Math.sqrt(dx * dx + dy * dy) < (isMobile ? 0.05 : 0.02)) { // Larger hit area on mobile
+        setSelectedPointId(point.id);
+        setIsDragging(true);
+        return;
+      }
     }
-  };
+    setSelectedPointId(null);
+  }, [activeLayer, isMobile]);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || !selectedPoint) return;
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      const dx = e.clientX - lastPanPoint.current.x;
+      const dy = e.clientY - lastPanPoint.current.y;
+      
+      setPanOffset(prev => {
+        const newX = prev.x + dx;
+        const newY = prev.y + dy;
+        
+        // Add boundary checks here if you want to constrain panning
+        
+        return { x: newX, y: newY };
+      });
+      
+      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!isDragging || !selectedPointId || !canvasRef.current || !activeLayerId) return;
 
-    const rect = canvas.getBoundingClientRect();
+    const rect = canvasRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
 
-    setPoints((prev) =>
-      prev.map((p) => (p.id === selectedPoint ? { ...p, x, y } : p))
-    );
-  };
+    updateLayer(activeLayerId, l => ({
+      ...l,
+      points: l.points.map((p) =>
+        p.id === selectedPointId ? { ...p, x, y } : p
+      ),
+    }));
+  }, [isDragging, selectedPointId, activeLayerId, isPanning]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
+    if (isPanning) {
+      setIsPanning(false);
+      document.body.style.cursor = 'default';
+    }
     if (isDragging) {
-      saveToHistory(points, blur);
       setIsDragging(false);
+      onSave();
     }
+  }, [isDragging, onSave, isPanning]);
+
+  const centerCanvas = () => {
+    setPanOffset({ x: 0, y: 0 });
+    setZoom(100);
+    toast.success("Canvas centered");
   };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = (touch.clientX - rect.left) / rect.width;
-    const y = (touch.clientY - rect.top) / rect.height;
-
-    const clickedPoint = points.find((p) => {
-      const dx = Math.abs(p.x - x) * rect.width;
-      const dy = Math.abs(p.y - y) * rect.height;
-      return Math.sqrt(dx * dx + dy * dy) < 30; // 30px touch radius
-    });
-
-    if (clickedPoint) {
-      setSelectedPoint(clickedPoint.id);
-      setIsDragging(true);
-    } else {
-      setSelectedPoint(null);
-    }
+  const handleAddLayer = () => {
+    const newLayer = createNewLayer(`Layer ${layers.length + 1}`, layers);
+    setLayers([...layers, newLayer]);
+    setActiveLayerId(newLayer.id);
+    onSave();
   };
 
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDragging || !selectedPoint) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
-
-    setPoints((prev) =>
-      prev.map((p) => (p.id === selectedPoint ? { ...p, x, y } : p))
-    );
-  };
-
-  const handleTouchEnd = () => {
-    if (isDragging) {
-      saveToHistory(points, blur);
-      setIsDragging(false);
-    }
-  };
-
-  const addPoint = () => {
-    if (points.length >= 10) {
-      toast.error("Maximum 10 gradient points allowed");
+  const handleDeleteLayer = (layerId: string) => {
+    if (layers.length <= 1) {
+      toast.error("Cannot delete the last layer.");
       return;
     }
+    const newLayers = layers.filter(l => l.id !== layerId);
+    setLayers(newLayers);
+    if (activeLayerId === layerId) {
+      setActiveLayerId(newLayers[0]?.id || null);
+    }
+    onSave();
+  };
 
+  const handleSelectLayer = (layerId: string) => {
+    setActiveLayerId(layerId);
+  };
+
+  const handleLayerOrderChange = (newOrder: GradientLayer[]) => {
+    setLayers(newOrder);
+    onSave();
+  };
+
+  const handleDuplicateLayer = (layerId: string) => {
+    const layerToDuplicate = layers.find(l => l.id === layerId);
+    if (!layerToDuplicate) return;
+    const newLayer = {
+      ...layerToDuplicate,
+      id: `layer-${Date.now()}`,
+      name: `${layerToDuplicate.name} Copy`,
+    };
+    const index = layers.findIndex(l => l.id === layerId);
+    const newLayers = [...layers];
+    newLayers.splice(index + 1, 0, newLayer);
+    setLayers(newLayers);
+    setActiveLayerId(newLayer.id);
+    onSave();
+  };
+
+  const handleToggleLayerVisibility = (layerId: string) => {
+    updateLayer(layerId, l => ({ ...l, isVisible: !l.isVisible }));
+    onSave();
+  };
+
+  const handleRenameLayer = (layerId: string, newName: string) => {
+    updateLayer(layerId, l => ({ ...l, name: newName }));
+    onSave();
+  };
+
+  const handleAddPoint = () => {
+    if (!activeLayerId) return;
     const newPoint: GradientPoint = {
-      id: Date.now().toString(),
-      x: 0.5,
-      y: 0.5,
-      color: DEFAULT_COLORS[points.length % DEFAULT_COLORS.length],
+      id: `p${Date.now()}`,
+      x: Math.random() * 0.8 + 0.1,
+      y: Math.random() * 0.8 + 0.1,
+      color: DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
     };
-
-    const newPoints = [...points, newPoint];
-    setPoints(newPoints);
-    saveToHistory(newPoints, blur);
-    toast.success("Gradient point added");
+    updateLayer(activeLayerId, l => ({ ...l, points: [...l.points, newPoint] }));
+    onSave();
   };
 
-  const removePoint = (id: string) => {
-    if (points.length <= 1) {
-      toast.error("At least one gradient point required");
-      return;
-    }
-
-    const newPoints = points.filter((p) => p.id !== id);
-    setPoints(newPoints);
-    setSelectedPoint(null);
-    saveToHistory(newPoints, blur);
-    toast.success("Gradient point removed");
+  const handleDeletePoint = () => {
+    if (!activeLayerId || !selectedPointId) return;
+    updateLayer(activeLayerId, (layer) => {
+      const newPoints = layer.points.filter((p) => p.id !== selectedPointId);
+      return { ...layer, points: newPoints };
+    });
+    setSelectedPointId(null);
+    onSave();
   };
 
-  const updatePointColor = (id: string, color: string) => {
-    const newPoints = points.map((p) => (p.id === id ? { ...p, color } : p));
-    setPoints(newPoints);
-    saveToHistory(newPoints, blur);
+  const handleClearPoints = () => {
+    if (!activeLayerId) return;
+    updateLayer(activeLayerId, l => ({ ...l, points: [] }));
+    onSave();
   };
 
-  const applyPalette = (paletteName: string) => {
-    const colors = COLOR_PALETTES[paletteName as keyof typeof COLOR_PALETTES];
-    if (!colors) return;
-
-    const newPoints = points.map((point, index) => ({
-      ...point,
-      color: colors[index % colors.length],
+  const handleRandomize = () => {
+    if (!activeLayerId) return;
+    const randomPaletteName = Object.keys(COLOR_PALETTES)[Math.floor(Math.random() * Object.keys(COLOR_PALETTES).length)];
+    const randomPalette = COLOR_PALETTES[randomPaletteName as keyof typeof COLOR_PALETTES];
+    
+    updateLayer(activeLayerId, l => ({
+      ...l,
+      points: l.points.map(p => ({
+        ...p,
+        color: randomPalette[Math.floor(Math.random() * randomPalette.length)],
+        x: Math.random(),
+        y: Math.random(),
+      })),
+      blur: Math.random() * 200 + 50,
+      gradientSpread: Math.random() * 0.8 + 0.2,
     }));
-
-    setPoints(newPoints);
-    saveToHistory(newPoints, blur);
-    toast.success(`Applied ${paletteName} palette`);
+    onSave();
+    toast.success(`Randomized with ${randomPaletteName} palette!`);
   };
 
-  const updateBlur = (value: number) => {
-    setBlur(value);
-    saveToHistory(points, value);
-  };
-
-  const updateGradientSpread = (value: number) => {
-    setGradientSpread(value);
-    saveToHistory(points, blur, value);
-  };
-
-  const updateBackgroundColor = (color: string) => {
-    setBackgroundColor(color);
-    saveToHistory(points, blur, undefined, color);
-  };
-
-  const updateFadeEndpoint = (value: number) => {
-    setFadeEndpoint(value);
-    saveToHistory(points, blur, undefined, undefined, value);
-  };
-
-  const applyEdgePreset = (presetName: string) => {
-    const preset = EDGE_PRESETS[presetName as keyof typeof EDGE_PRESETS];
-    if (!preset) return;
-
-    setGradientSpread(preset.spread);
-    setBackgroundColor(preset.backgroundColor);
-    setFadeEndpoint(preset.fadeEndpoint);
-    saveToHistory(points, blur, preset.spread, preset.backgroundColor, preset.fadeEndpoint);
-    toast.success(`Applied ${presetName} preset`);
-  };
-
-  const randomizePositions = () => {
-    const newPoints = points.map((point) => ({
-      ...point,
-      x: Math.random(),
-      y: Math.random(),
+  const handlePointColorChange = (color: string) => {
+    if (!activeLayerId || !selectedPointId) return;
+    updateLayer(activeLayerId, l => ({
+      ...l,
+      points: l.points.map(p => p.id === selectedPointId ? { ...p, color } : p),
     }));
-
-    setPoints(newPoints);
-    saveToHistory(newPoints, blur);
-    toast.success("Positions randomized!");
+    // No saveToHistory here, it's called on color picker close
   };
 
-  const saveCurrentPreset = () => {
-    const presetName = prompt("Enter a name for this preset:");
-    if (!presetName) return;
-
-    const preset: SavedPreset = {
-      name: presetName,
-      points,
-      blur,
-      gradientSpread,
-      backgroundColor,
-      fadeEndpoint,
-      blendMode,
-      noiseEnabled,
-      noiseOpacity,
-      noiseDensity,
-      noiseSharpness,
-      ditherMode,
-      ditherIntensity,
-      imageOpacity,
-      ditherScale,
-      ditherInvert,
-      imageContrast,
-      imageBrightness,
-      imageMidtones,
-      imageHighlights,
-      imageLuminanceThreshold,
-      imageHue,
-      imageSaturation,
-    };
-
-    setSavedPresets([...savedPresets, preset]);
-    toast.success(`Preset "${presetName}" saved!`);
+  const handleApplyPalette = (palette: string[]) => {
+    if (!activeLayerId) return;
+    updateLayer(activeLayerId, l => ({
+      ...l,
+      points: l.points.map((p, i) => ({
+        ...p,
+        color: palette[i % palette.length],
+      })),
+    }));
+    onSave();
+    toast.success("Palette applied!");
   };
 
-  const loadPreset = (preset: SavedPreset) => {
-    setPoints(preset.points);
-    setBlur(preset.blur);
-    setGradientSpread(preset.gradientSpread);
-    setBackgroundColor(preset.backgroundColor);
-    setFadeEndpoint(preset.fadeEndpoint);
-    setBlendMode(preset.blendMode);
-    setNoiseEnabled(preset.noiseEnabled);
-    setNoiseOpacity(preset.noiseOpacity);
-    setNoiseDensity(preset.noiseDensity);
-    setNoiseSharpness(preset.noiseSharpness);
-    setDitherMode(preset.ditherMode);
-    setDitherIntensity(preset.ditherIntensity);
-    setImageOpacity(preset.imageOpacity);
-    setDitherScale(preset.ditherScale ?? 1.0);
-    setDitherInvert(preset.ditherInvert ?? false);
-    setImageContrast(preset.imageContrast ?? 0);
-    setImageBrightness(preset.imageBrightness ?? 0);
-    setImageMidtones(preset.imageMidtones ?? 0);
-    setImageHighlights(preset.imageHighlights ?? 0);
-    setImageLuminanceThreshold(preset.imageLuminanceThreshold ?? 127);
-    setImageHue(preset.imageHue ?? 0);
-    setImageSaturation(preset.imageSaturation ?? 0);
-    saveToHistory(preset.points, preset.blur);
-    toast.success(`Loaded preset "${preset.name}"`);
-  };
-
-  const deletePreset = (index: number) => {
-    const newPresets = savedPresets.filter((_, i) => i !== index);
-    setSavedPresets(newPresets);
-    toast.success("Preset deleted");
-  };
-
-  const exportPresetToFile = (preset: SavedPreset) => {
-    const dataStr = JSON.stringify(preset, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${preset.name.replace(/\s+/g, '_')}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Preset exported!");
-  };
-
-  const importPresetFromFile = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json";
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const preset = JSON.parse(event.target?.result as string) as SavedPreset;
-          setSavedPresets([...savedPresets, preset]);
-          toast.success(`Imported preset "${preset.name}"`);
-        } catch (error) {
-          toast.error("Failed to import preset");
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
-  };
-
-  const exportCanvas = async (format: "png" | "svg") => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    if (format === "png") {
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `gradient-${Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success("PNG downloaded!");
-      });
-    } else {
-      // SVG export - create gradient definitions
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvasSize.width}" height="${canvasSize.height}">
-        <defs>
-          ${points
-            .map(
-              (p, i) => `
-            <radialGradient id="grad${i}" cx="${p.x * 100}%" cy="${p.y * 100}%">
-              <stop offset="0%" style="stop-color:${p.color};stop-opacity:1" />
-              <stop offset="100%" style="stop-color:${p.color};stop-opacity:0" />
-            </radialGradient>
-          `
-            )
-            .join("")}
-        </defs>
-        <rect width="100%" height="100%" fill="white"/>
-        ${points
-          .map(
-            (p, i) => `
-          <rect width="100%" height="100%" fill="url(#grad${i})" filter="blur(${blur}px)"/>
-        `
-          )
-          .join("")}
-      </svg>`;
-
-      const blob = new Blob([svg], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `gradient-${Date.now()}.svg`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("SVG downloaded!");
-    }
-  };
-
-
+  const selectedPointColor = activeLayer?.points.find(p => p.id === selectedPointId)?.color;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Top Toolbar */}
-      <div className="h-14 glass-card flex items-center justify-between px-2 md:px-4">
+    <div className="w-screen h-screen flex flex-col bg-background text-foreground overflow-hidden">
+      {/* Header */}
+      <header className="h-16 flex items-center justify-between px-4 border-b z-20 glassmorphic-header">
         <div className="flex items-center gap-2">
           {isMobile && (
             <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-5 w-5" />
-                </Button>
+                <Button variant="ghost" size="icon"><Menu /></Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-80 overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Colors & Layers</SheetTitle>
-                </SheetHeader>
-                <LeftSidebarContent
-                  savedPresets={savedPresets}
-                  points={points}
-                  selectedPoint={selectedPoint}
-                  uploadedImage={uploadedImage}
-                  ditherMode={ditherMode}
-                  ditherIntensity={ditherIntensity}
-                  ditherScale={ditherScale}
-                  ditherInvert={ditherInvert}
-                  imageOpacity={imageOpacity}
-                  imageContrast={imageContrast}
-                  imageBrightness={imageBrightness}
-                  imageMidtones={imageMidtones}
-                  imageHighlights={imageHighlights}
-                  imageLuminanceThreshold={imageLuminanceThreshold}
-                  imageHue={imageHue}
-                  imageSaturation={imageSaturation}
-                  colorPalettes={COLOR_PALETTES}
-                  onLoadPreset={loadPreset}
-                  onExportPreset={exportPresetToFile}
-                  onDeletePreset={deletePreset}
-                  onApplyPalette={applyPalette}
-                  onRandomizePositions={randomizePositions}
-                  onSetSelectedPoint={setSelectedPoint}
-                  onUpdatePointColor={updatePointColor}
-                  onRemovePoint={removePoint}
-                  onAddPoint={addPoint}
-                  onImageUpload={handleImageUpload}
-                  onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
-                  onSetDitherMode={setDitherMode}
-                  onSetDitherIntensity={setDitherIntensity}
-                  onSetDitherScale={setDitherScale}
-                  onSetDitherInvert={setDitherInvert}
-                  onSetImageOpacity={setImageOpacity}
-                  onSetImageContrast={setImageContrast}
-                  onSetImageBrightness={setImageBrightness}
-                  onSetImageMidtones={setImageMidtones}
-                  onSetImageHighlights={setImageHighlights}
-                  onSetImageLuminanceThreshold={setImageLuminanceThreshold}
-                  onSetImageHue={setImageHue}
-                  onSetImageSaturation={setImageSaturation}
-                  isMobile={isMobile}
-                  onCloseSheet={() => setLeftSheetOpen(false)}
-                />
-              </SheetContent>
-            </Sheet>
-          )}
-          <h1 className="text-sm md:text-lg font-semibold">Gradient Canvas</h1>
-          <div className="hidden md:flex items-center gap-1 ml-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={undo}
-              disabled={historyIndex <= 0}
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={redo}
-              disabled={historyIndex >= history.length - 1}
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Zoom Controls - Desktop only */}
-        <div className="hidden md:flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setZoom(Math.max(25, zoom - 25))}
-            title="Zoom Out"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <div className="w-20 text-center text-sm font-mono">{zoom}%</div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setZoom(Math.min(400, zoom + 25))}
-            title="Zoom In"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setZoom(100)}
-            title="Fit to View"
-          >
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Export & Presets */}
-        <div className="flex items-center gap-1 md:gap-2">
-          <ModeToggle />
-          {isMobile ? (
-            <>
-              <Button onClick={() => exportCanvas("png")} variant="default" size="icon">
-                <Download className="h-4 w-4" />
-              </Button>
-              <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                <Sliders className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-80 overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Settings</SheetTitle>
-                  </SheetHeader>
-                  <RightSidebarContent
-                    canvasSize={canvasSize}
-                    canvasPresets={CANVAS_PRESETS}
-                    blur={blur}
-                    blendMode={blendMode}
-                    blendModes={BLEND_MODES}
-                    blendModeLabels={BLEND_MODE_LABELS}
-                    gradientSpread={gradientSpread}
-                    backgroundColor={backgroundColor}
-                    fadeEndpoint={fadeEndpoint}
-                    edgePresets={EDGE_PRESETS}
-                    noiseEnabled={noiseEnabled}
-                    noiseOpacity={noiseOpacity}
-                    noiseDensity={noiseDensity}
-                    noiseSharpness={noiseSharpness}
-                    onSetCanvasSize={setCanvasSize}
-                    onUpdateBlur={updateBlur}
-                    onSetBlendMode={setBlendMode}
-                    onUpdateGradientSpread={updateGradientSpread}
-                    onUpdateBackgroundColor={updateBackgroundColor}
-                    onUpdateFadeEndpoint={updateFadeEndpoint}
-                    onApplyEdgePreset={applyEdgePreset}
-                    onSetNoiseEnabled={setNoiseEnabled}
-                    onSetNoiseOpacity={setNoiseOpacity}
-                    onSetNoiseDensity={setNoiseDensity}
-                    onSetNoiseSharpness={setNoiseSharpness}
-                    isMobile={isMobile}
-                    onCloseSheet={() => setRightSheetOpen(false)}
+              <SheetContent side="left" className="w-[300px] sm:w-[350px] p-0">
+                <ScrollArea className="h-full">
+                  <LeftSidebarContent
+                    layers={layers}
+                    activeLayerId={activeLayerId}
+                    onAddLayer={handleAddLayer}
+                    onDeleteLayer={handleDeleteLayer}
+                    onSelectLayer={handleSelectLayer}
+                    onLayerOrderChange={handleLayerOrderChange}
+                    onDuplicateLayer={handleDuplicateLayer}
+                    onToggleVisibility={handleToggleLayerVisibility}
+                    onRenameLayer={handleRenameLayer}
+                    savedPresets={savedPresets}
+                    onSavePreset={savePreset}
+                    onLoadPreset={loadPreset}
+                    onDeletePreset={deletePreset}
                   />
-                </SheetContent>
-              </Sheet>
-            </>
-          ) : (
-            <>
-              <Button onClick={saveCurrentPreset} variant="outline" size="sm">
-                <Save className="h-4 w-4 mr-2" />
-                Save Preset
-              </Button>
-              <Button onClick={importPresetFromFile} variant="outline" size="sm">
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Import
-              </Button>
-              <Button onClick={() => exportCanvas("png")} variant="default" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Export PNG
-              </Button>
-              <Button onClick={() => exportCanvas("svg")} variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                SVG
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar - Desktop only, hidden on tablet */}
-        {!isMobile && !isTablet && (
-          <div className="w-72 glass-card flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <LeftSidebarContent
-                savedPresets={savedPresets}
-                points={points}
-                selectedPoint={selectedPoint}
-                uploadedImage={uploadedImage}
-                ditherMode={ditherMode}
-                ditherIntensity={ditherIntensity}
-                ditherScale={ditherScale}
-                ditherInvert={ditherInvert}
-                imageOpacity={imageOpacity}
-                imageContrast={imageContrast}
-                imageBrightness={imageBrightness}
-                imageMidtones={imageMidtones}
-                imageHighlights={imageHighlights}
-                imageLuminanceThreshold={imageLuminanceThreshold}
-                imageHue={imageHue}
-                imageSaturation={imageSaturation}
-                colorPalettes={COLOR_PALETTES}
-                onLoadPreset={loadPreset}
-                onExportPreset={exportPresetToFile}
-                onDeletePreset={deletePreset}
-                onApplyPalette={applyPalette}
-                onRandomizePositions={randomizePositions}
-                onSetSelectedPoint={setSelectedPoint}
-                onUpdatePointColor={updatePointColor}
-                onRemovePoint={removePoint}
-                onAddPoint={addPoint}
-                onImageUpload={handleImageUpload}
-                onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
-                onSetDitherMode={setDitherMode}
-                onSetDitherIntensity={setDitherIntensity}
-                onSetDitherScale={setDitherScale}
-                onSetDitherInvert={setDitherInvert}
-                onSetImageOpacity={setImageOpacity}
-                onSetImageContrast={setImageContrast}
-                onSetImageBrightness={setImageBrightness}
-                onSetImageMidtones={setImageMidtones}
-                onSetImageHighlights={setImageHighlights}
-                onSetImageLuminanceThreshold={setImageLuminanceThreshold}
-                onSetImageHue={setImageHue}
-                onSetImageSaturation={setImageSaturation}
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* Tablet Left Sheet Trigger */}
-        {isTablet && (
-          <Sheet open={leftSheetOpen} onOpenChange={setLeftSheetOpen}>
-            <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="absolute left-4 top-20 z-10 bg-card border border-border shadow-lg"
-              >
-                <Palette className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-80 overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle>Colors & Layers</SheetTitle>
-              </SheetHeader>
-                <LeftSidebarContent
-                  savedPresets={savedPresets}
-                  points={points}
-                  selectedPoint={selectedPoint}
-                  uploadedImage={uploadedImage}
-                  ditherMode={ditherMode}
-                  ditherIntensity={ditherIntensity}
-                  ditherScale={ditherScale}
-                  ditherInvert={ditherInvert}
-                  imageOpacity={imageOpacity}
-                  imageContrast={imageContrast}
-                  imageBrightness={imageBrightness}
-                  imageMidtones={imageMidtones}
-                  imageHighlights={imageHighlights}
-                  imageLuminanceThreshold={imageLuminanceThreshold}
-                  imageHue={imageHue}
-                  imageSaturation={imageSaturation}
-                  colorPalettes={COLOR_PALETTES}
-                  onLoadPreset={loadPreset}
-                  onExportPreset={exportPresetToFile}
-                  onDeletePreset={deletePreset}
-                  onApplyPalette={applyPalette}
-                  onRandomizePositions={randomizePositions}
-                  onSetSelectedPoint={setSelectedPoint}
-                  onUpdatePointColor={updatePointColor}
-                  onRemovePoint={removePoint}
-                  onAddPoint={addPoint}
-                  onImageUpload={handleImageUpload}
-                  onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
-                  onSetDitherMode={setDitherMode}
-                  onSetDitherIntensity={setDitherIntensity}
-                  onSetDitherScale={setDitherScale}
-                  onSetDitherInvert={setDitherInvert}
-                  onSetImageOpacity={setImageOpacity}
-                  onSetImageContrast={setImageContrast}
-                  onSetImageBrightness={setImageBrightness}
-                  onSetImageMidtones={setImageMidtones}
-                  onSetImageHighlights={setImageHighlights}
-                  onSetImageLuminanceThreshold={setImageLuminanceThreshold}
-                  onSetImageHue={setImageHue}
-                  onSetImageSaturation={setImageSaturation}
-                  isMobile={isMobile}
-                  onCloseSheet={() => setLeftSheetOpen(false)}
-                />
+                </ScrollArea>
               </SheetContent>
             </Sheet>
           )}
+          <h1 className="text-lg font-bold tracking-tighter">Instant Hue</h1>
+        </div>
 
-          {/* Center Canvas */}
-          <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2 md:p-4 lg:p-8">
-            <div 
-              className="relative" 
-              style={{ 
-                transform: isMobile ? 'scale(1)' : `scale(${zoom / 100})`, 
-                transformOrigin: 'center' 
-              }}
-            >
-              <CanvasRenderer
-                ref={canvasRef}
-                points={points}
-                blur={blur}
-                canvasWidth={canvasSize.width}
-                canvasHeight={canvasSize.height}
-                backgroundColor={backgroundColor}
-                gradientSpread={gradientSpread}
-                fadeEndpoint={fadeEndpoint}
-                blendMode={blendMode}
-                noiseEnabled={noiseEnabled}
-                noiseOpacity={noiseOpacity}
-                noiseDensity={noiseDensity}
-                noiseSharpness={noiseSharpness}
-                uploadedImage={uploadedImage}
-                ditherMode={ditherMode}
-                ditherIntensity={ditherIntensity}
-                imageOpacity={imageOpacity}
-                ditherScale={ditherScale}
-                ditherInvert={ditherInvert}
-                imageContrast={imageContrast}
-                imageBrightness={imageBrightness}
-                imageMidtones={imageMidtones}
-                imageHighlights={imageHighlights}
-                imageLuminanceThreshold={imageLuminanceThreshold}
-                imageHue={imageHue}
-                imageSaturation={imageSaturation}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+        <div className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-1 p-1 glassmorphic-controls rounded-lg">
+          <Button variant="ghost" size="sm" onClick={undo} disabled={historyIndex <= 0}><Undo2 className="h-4 w-4" /> <span className="ml-2">Undo</span></Button>
+          <Button variant="ghost" size="sm" onClick={redo} disabled={historyIndex >= history.length - 1}><Redo2 className="h-4 w-4" /> <span className="ml-2">Redo</span></Button>
+          <Button variant="ghost" size="sm" onClick={downloadImage}><Download className="h-4 w-4" /> <span className="ml-2">Download</span></Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <ModeToggle />
+          {isMobile && (
+            <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon"><Sliders /></Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-[300px] sm:w-[350px] p-0">
+                <ScrollArea className="h-full">
+                  {activeLayer ? (
+                    <RightSidebarContent
+                      activeLayer={activeLayer}
+                      updateActiveLayer={updateActiveLayer}
+                      onSave={onSave}
+                      selectedPointId={selectedPointId}
+                      onPointColorChange={handlePointColorChange}
+                      selectedPointColor={selectedPointColor}
+                      onDeletePoint={handleDeletePoint}
+                      onAddPoint={handleAddPoint}
+                      onClearPoints={handleClearPoints}
+                      onRandomize={handleRandomize}
+                      onImageUpload={handleImageUpload}
+                      onApplyPalette={handleApplyPalette}
+                      colorPalettes={COLOR_PALETTES}
+                    />
+                  ) : (
+                    <div className="p-4 text-center text-muted-foreground">Select a layer to edit its properties.</div>
+                  )}
+                </ScrollArea>
+              </SheetContent>
+            </Sheet>
+          )}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex">
+        {/* Left Sidebar */}
+        {!isMobile && (
+          <aside className="w-[300px] border-r p-0 glassmorphic-sidebar-l">
+            <ScrollArea className="h-full">
+              <LeftSidebarContent
+                layers={layers}
+                activeLayerId={activeLayerId}
+                onAddLayer={handleAddLayer}
+                onDeleteLayer={handleDeleteLayer}
+                onSelectLayer={handleSelectLayer}
+                onLayerOrderChange={handleLayerOrderChange}
+                onDuplicateLayer={handleDuplicateLayer}
+                onToggleVisibility={handleToggleLayerVisibility}
+                onRenameLayer={handleRenameLayer}
+                savedPresets={savedPresets}
+                onSavePreset={savePreset}
+                onLoadPreset={loadPreset}
+                onDeletePreset={deletePreset}
               />
-            {/* Point indicators */}
-            {points.map((point) => (
-              <div
-                key={point.id}
-                className={`absolute w-6 h-6 rounded-full border-2 border-white shadow-lg transition-transform pointer-events-none ${
-                  selectedPoint === point.id ? "scale-125 ring-2 ring-primary" : ""
-                }`}
-                style={{
-                  left: `${point.x * 100}%`,
-                  top: `${point.y * 100}%`,
-                  transform: "translate(-50%, -50%)",
-                  backgroundColor: point.color,
-                }}
-              />
-            ))}
-            <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-mono">
-              {canvasSize.width} × {canvasSize.height}
-            </div>
+            </ScrollArea>
+          </aside>
+        )}
+
+        {/* Canvas */}
+        <div ref={canvasContainerRef} className="flex-1 flex items-center justify-center bg-grid p-4 overflow-hidden" onMouseUp={handleMouseUp}>
+          <div className="overflow-auto">
+            <CanvasRenderer
+              ref={canvasRef}
+              layers={layers.filter(l => l.isVisible)}
+              activeLayerId={activeLayerId}
+              selectedPointId={selectedPointId}
+              containerRef={canvasContainerRef}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              zoom={zoom}
+              panOffset={panOffset}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+            />
           </div>
         </div>
 
-        {/* Right Sidebar - Desktop only, hidden on tablet */}
-        {!isMobile && !isTablet && (
-          <div className="w-72 glass-card flex flex-col">
-            <div className="flex-1 overflow-y-auto">
-              <RightSidebarContent
-                canvasSize={canvasSize}
-                canvasPresets={CANVAS_PRESETS}
-                blur={blur}
-                blendMode={blendMode}
-                blendModes={BLEND_MODES}
-                blendModeLabels={BLEND_MODE_LABELS}
-                gradientSpread={gradientSpread}
-                backgroundColor={backgroundColor}
-                fadeEndpoint={fadeEndpoint}
-                edgePresets={EDGE_PRESETS}
-                noiseEnabled={noiseEnabled}
-                noiseOpacity={noiseOpacity}
-                noiseDensity={noiseDensity}
-                noiseSharpness={noiseSharpness}
-                onSetCanvasSize={setCanvasSize}
-                onUpdateBlur={updateBlur}
-                onSetBlendMode={setBlendMode}
-                onUpdateGradientSpread={updateGradientSpread}
-                onUpdateBackgroundColor={updateBackgroundColor}
-                onUpdateFadeEndpoint={updateFadeEndpoint}
-                onApplyEdgePreset={applyEdgePreset}
-                onSetNoiseEnabled={setNoiseEnabled}
-                onSetNoiseOpacity={setNoiseOpacity}
-                onSetNoiseDensity={setNoiseDensity}
-                onSetNoiseSharpness={setNoiseSharpness}
-              />
+        {/* Right Sidebar */}
+        {!isMobile && (
+          <aside className="w-[350px] border-l p-0 glassmorphic-sidebar-r">
+            <ScrollArea className="h-full">
+              {activeLayer ? (
+                <RightSidebarContent
+                  activeLayer={activeLayer}
+                  updateActiveLayer={updateActiveLayer}
+                  onSave={onSave}
+                  selectedPointId={selectedPointId}
+                  onPointColorChange={handlePointColorChange}
+                  selectedPointColor={selectedPointColor}
+                  onDeletePoint={handleDeletePoint}
+                  onAddPoint={handleAddPoint}
+                  onClearPoints={handleClearPoints}
+                  onRandomize={handleRandomize}
+                  onImageUpload={handleImageUpload}
+                  onApplyPalette={handleApplyPalette}
+                  colorPalettes={COLOR_PALETTES}
+                />
+              ) : (
+                <div className="p-6 text-center text-muted-foreground">Select a layer to edit its properties.</div>
+              )}
+            </ScrollArea>
+          </aside>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="h-12 flex items-center justify-between px-4 border-t z-10 glassmorphic-footer">
+        <div className="flex items-center gap-2">
+          {activeLayer && (
+            <div className="text-sm text-muted-foreground">
+              Editing: <span className="font-semibold text-foreground">{activeLayer.name}</span>
             </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.max(10, z - 10))}><ZoomOut className="h-4 w-4" /></Button>
+          <div className="w-16 text-center text-sm">{zoom}%</div>
+          <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.min(200, z + 10))}><ZoomIn className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={centerCanvas}><Maximize className="h-4 w-4" /></Button>
+        </div>
+        <div className="hidden md:flex items-center gap-2">
+          <div className="text-sm text-muted-foreground">
+            Canvas: {canvasWidth} x {canvasHeight}
           </div>
-        )}
-        
-        {/* Tablet Right Sheet Trigger */}
-        {isTablet && (
-          <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
-            <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="absolute right-4 top-20 z-10 bg-card border border-border shadow-lg"
-              >
-                <Sliders className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-80 overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle>Settings</SheetTitle>
-              </SheetHeader>
-              <RightSidebarContent
-                canvasSize={canvasSize}
-                canvasPresets={CANVAS_PRESETS}
-                blur={blur}
-                blendMode={blendMode}
-                blendModes={BLEND_MODES}
-                blendModeLabels={BLEND_MODE_LABELS}
-                gradientSpread={gradientSpread}
-                backgroundColor={backgroundColor}
-                fadeEndpoint={fadeEndpoint}
-                edgePresets={EDGE_PRESETS}
-                noiseEnabled={noiseEnabled}
-                noiseOpacity={noiseOpacity}
-                noiseDensity={noiseDensity}
-                noiseSharpness={noiseSharpness}
-                onSetCanvasSize={setCanvasSize}
-                onUpdateBlur={updateBlur}
-                onSetBlendMode={setBlendMode}
-                onUpdateGradientSpread={updateGradientSpread}
-                onUpdateBackgroundColor={updateBackgroundColor}
-                onUpdateFadeEndpoint={updateFadeEndpoint}
-                onApplyEdgePreset={applyEdgePreset}
-                onSetNoiseEnabled={setNoiseEnabled}
-                onSetNoiseOpacity={setNoiseOpacity}
-                onSetNoiseDensity={setNoiseDensity}
-                onSetNoiseSharpness={setNoiseSharpness}
-                isMobile={isMobile}
-                onCloseSheet={() => setRightSheetOpen(false)}
-              />
-            </SheetContent>
-          </Sheet>
-        )}
-      </div>
+        </div>
+      </footer>
     </div>
   );
 };

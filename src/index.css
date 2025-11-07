@@ -66,6 +66,49 @@
   }
 }
 
+.bg-grid {
+  background-color: hsl(var(--background));
+  background-image:
+    linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.glassmorphic-header {
+  background-color: hsl(var(--background) / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.glassmorphic-footer {
+  background-color: hsl(var(--background) / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid hsl(var(--border));
+}
+
+.glassmorphic-sidebar-l {
+  background-color: hsl(var(--background) / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-right: 1px solid hsl(var(--border));
+}
+
+.glassmorphic-sidebar-r {
+  background-color: hsl(var(--background) / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-left: 1px solid hsl(var(--border));
+}
+
+.glassmorphic-controls {
+  background-color: hsl(var(--muted) / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid hsl(var(--border));
+}
+
 @layer base {
   * {
     @apply border-border;
