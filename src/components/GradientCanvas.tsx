@@ -4,9 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize, Save, FolderOpen, Menu, Settings, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { SliderWithReset } from "@/components/SliderWithReset";
 import {
   Select,
   SelectContent,
@@ -1246,30 +1244,9 @@ export const GradientCanvas = () => {
     }
   };
 
-  // Default values for sliders
-  const defaults = {
-    blur: 120,
-    gradientSpread: 0.6,
-    fadeEndpoint: 1.0,
-    noiseOpacity: 20,
-    noiseDensity: 20,
-    noiseSharpness: 2.0,
-    ditherIntensity: 128,
-    ditherScale: 1.0,
-    imageOpacity: 100,
-    imageContrast: 0,
-    imageBrightness: 0,
-    imageMidtones: 0,
-    imageHighlights: 0,
-    imageLuminanceThreshold: 127,
-    imageHue: 0,
-    imageSaturation: 0,
-  };
-
   // Sidebar content components for reuse
   const LeftSidebarContent = () => (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6">
       {/* Saved Presets */}
       {savedPresets.length > 0 && (
         <div>
@@ -1472,26 +1449,33 @@ export const GradientCanvas = () => {
 
             {ditherMode !== "none" && (
               <>
-                <SliderWithReset
-                  label="Threshold"
-                  value={ditherIntensity}
-                  defaultValue={defaults.ditherIntensity}
-                  onChange={setDitherIntensity}
-                  min={0}
-                  max={255}
-                  step={1}
-                />
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Threshold: {ditherIntensity}
+                  </label>
+                  <Slider
+                    value={[ditherIntensity]}
+                    onValueChange={(v) => setDitherIntensity(v[0])}
+                    min={0}
+                    max={255}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
 
-                <SliderWithReset
-                  label="Pattern Resolution"
-                  value={ditherScale}
-                  defaultValue={defaults.ditherScale}
-                  onChange={setDitherScale}
-                  min={0.5}
-                  max={8.0}
-                  step={0.1}
-                  formatValue={(v) => `${v.toFixed(2)}x`}
-                />
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-2">
+                    Pattern Resolution: {ditherScale.toFixed(2)}x
+                  </label>
+                  <Slider
+                    value={[ditherScale]}
+                    onValueChange={(v) => setDitherScale(v[0])}
+                    min={0.5}
+                    max={8.0}
+                    step={0.1}
+                    className="w-full"
+                  />
+                </div>
 
                  <div className="flex items-center justify-between">
                    <label className="text-xs text-muted-foreground">
@@ -1514,98 +1498,126 @@ export const GradientCanvas = () => {
                  Image Adjustments
                </div>
                
-               <SliderWithReset
-                 label="Contrast"
-                 value={imageContrast}
-                 defaultValue={defaults.imageContrast}
-                 onChange={setImageContrast}
-                 min={-100}
-                 max={100}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Contrast: {imageContrast}
+                 </label>
+                 <Slider
+                   value={[imageContrast]}
+                   onValueChange={(v) => setImageContrast(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Brightness"
-                 value={imageBrightness}
-                 defaultValue={defaults.imageBrightness}
-                 onChange={setImageBrightness}
-                 min={-100}
-                 max={100}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Brightness: {imageBrightness}
+                 </label>
+                 <Slider
+                   value={[imageBrightness]}
+                   onValueChange={(v) => setImageBrightness(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Midtones"
-                 value={imageMidtones}
-                 defaultValue={defaults.imageMidtones}
-                 onChange={setImageMidtones}
-                 min={-100}
-                 max={100}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Midtones: {imageMidtones}
+                 </label>
+                 <Slider
+                   value={[imageMidtones]}
+                   onValueChange={(v) => setImageMidtones(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Highlights"
-                 value={imageHighlights}
-                 defaultValue={defaults.imageHighlights}
-                 onChange={setImageHighlights}
-                 min={-100}
-                 max={100}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Highlights: {imageHighlights}
+                 </label>
+                 <Slider
+                   value={[imageHighlights]}
+                   onValueChange={(v) => setImageHighlights(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Luminance Threshold"
-                 value={imageLuminanceThreshold}
-                 defaultValue={defaults.imageLuminanceThreshold}
-                 onChange={setImageLuminanceThreshold}
-                 min={0}
-                 max={255}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Luminance Threshold: {imageLuminanceThreshold}
+                 </label>
+                 <Slider
+                   value={[imageLuminanceThreshold]}
+                   onValueChange={(v) => setImageLuminanceThreshold(v[0])}
+                   min={0}
+                   max={255}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Hue"
-                 value={imageHue}
-                 defaultValue={defaults.imageHue}
-                 onChange={setImageHue}
-                 min={-180}
-                 max={180}
-                 step={1}
-                 formatValue={(v) => `${v}°`}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Hue: {imageHue}°
+                 </label>
+                 <Slider
+                   value={[imageHue]}
+                   onValueChange={(v) => setImageHue(v[0])}
+                   min={-180}
+                   max={180}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
 
-               <SliderWithReset
-                 label="Saturation"
-                 value={imageSaturation}
-                 defaultValue={defaults.imageSaturation}
-                 onChange={setImageSaturation}
-                 min={-100}
-                 max={100}
-                 step={1}
-               />
+               <div>
+                 <label className="text-xs text-muted-foreground block mb-2">
+                   Saturation: {imageSaturation}
+                 </label>
+                 <Slider
+                   value={[imageSaturation]}
+                   onValueChange={(v) => setImageSaturation(v[0])}
+                   min={-100}
+                   max={100}
+                   step={1}
+                   className="w-full"
+                 />
+               </div>
              </div>
 
-             <SliderWithReset
-               label="Opacity"
-               value={imageOpacity}
-               defaultValue={defaults.imageOpacity}
-               onChange={setImageOpacity}
-               min={0}
-               max={100}
-               step={1}
-               formatValue={(v) => `${v}%`}
-             />
-           </div>
-         )}
-       </div>
+             <div>
+               <label className="text-xs text-muted-foreground block mb-2">
+                 Opacity: {imageOpacity}%
+               </label>
+               <Slider
+                 value={[imageOpacity]}
+                 onValueChange={(v) => setImageOpacity(v[0])}
+                 min={0}
+                 max={100}
+                 step={1}
+                 className="w-full"
+               />
+             </div>
+          </div>
+        )}
       </div>
-    </ScrollArea>
+    </div>
   );
 
   const RightSidebarContent = () => (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6">
       {/* Canvas Size */}
       <div>
         <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
@@ -1661,16 +1673,19 @@ export const GradientCanvas = () => {
         <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Effects</h2>
         
         <div className="space-y-4">
-          <SliderWithReset
-            label="Blur"
-            value={blur}
-            defaultValue={defaults.blur}
-            onChange={updateBlur}
-            min={0}
-            max={300}
-            step={1}
-            formatValue={(v) => `${v}px`}
-          />
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Blur: {blur}px
+            </label>
+            <Slider
+              value={[blur]}
+              onValueChange={(v) => updateBlur(v[0])}
+              min={0}
+              max={300}
+              step={1}
+              className="w-full"
+            />
+          </div>
 
           <div>
             <label className="text-xs text-muted-foreground block mb-2">
@@ -1718,16 +1733,19 @@ export const GradientCanvas = () => {
             </Select>
           </div>
 
-          <SliderWithReset
-            label="Spread"
-            value={gradientSpread}
-            defaultValue={defaults.gradientSpread}
-            onChange={updateGradientSpread}
-            min={0.3}
-            max={1.5}
-            step={0.1}
-            formatValue={(v) => v.toFixed(1)}
-          />
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Spread: {gradientSpread.toFixed(1)}
+            </label>
+            <Slider
+              value={[gradientSpread]}
+              onValueChange={(v) => updateGradientSpread(v[0])}
+              min={0.3}
+              max={1.5}
+              step={0.1}
+              className="w-full"
+            />
+          </div>
 
           <div>
             <label className="text-xs text-muted-foreground block mb-2">
@@ -1756,16 +1774,19 @@ export const GradientCanvas = () => {
             </div>
           </div>
 
-          <SliderWithReset
-            label="Fade"
-            value={fadeEndpoint}
-            defaultValue={defaults.fadeEndpoint}
-            onChange={updateFadeEndpoint}
-            min={0.3}
-            max={1.0}
-            step={0.05}
-            formatValue={(v) => v.toFixed(2)}
-          />
+          <div>
+            <label className="text-xs text-muted-foreground block mb-2">
+              Fade: {fadeEndpoint.toFixed(2)}
+            </label>
+            <Slider
+              value={[fadeEndpoint]}
+              onValueChange={(v) => updateFadeEndpoint(v[0])}
+              min={0.3}
+              max={1.0}
+              step={0.05}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
 
@@ -1785,42 +1806,51 @@ export const GradientCanvas = () => {
 
         {noiseEnabled && (
           <div className="space-y-3">
-            <SliderWithReset
-              label="Opacity"
-              value={noiseOpacity}
-              defaultValue={defaults.noiseOpacity}
-              onChange={setNoiseOpacity}
-              min={0}
-              max={100}
-              step={1}
-              formatValue={(v) => `${v}%`}
-            />
+            <div>
+              <label className="text-xs text-muted-foreground block mb-2">
+                Opacity: {noiseOpacity}%
+              </label>
+              <Slider
+                value={[noiseOpacity]}
+                onValueChange={(v) => setNoiseOpacity(v[0])}
+                min={0}
+                max={100}
+                step={1}
+                className="w-full"
+              />
+            </div>
 
-            <SliderWithReset
-              label="Density"
-              value={noiseDensity}
-              defaultValue={defaults.noiseDensity}
-              onChange={setNoiseDensity}
-              min={1}
-              max={100}
-              step={1}
-            />
+            <div>
+              <label className="text-xs text-muted-foreground block mb-2">
+                Density: {noiseDensity}
+              </label>
+              <Slider
+                value={[noiseDensity]}
+                onValueChange={(v) => setNoiseDensity(v[0])}
+                min={1}
+                max={100}
+                step={1}
+                className="w-full"
+              />
+            </div>
 
-            <SliderWithReset
-              label="Sharpness"
-              value={noiseSharpness}
-              defaultValue={defaults.noiseSharpness}
-              onChange={setNoiseSharpness}
-              min={0.1}
-              max={5}
-              step={0.1}
-              formatValue={(v) => v.toFixed(1)}
-            />
-           </div>
-         )}
-       </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-2">
+                Sharpness: {noiseSharpness.toFixed(1)}
+              </label>
+              <Slider
+                value={[noiseSharpness]}
+                onValueChange={(v) => setNoiseSharpness(v[0])}
+                min={0.1}
+                max={5}
+                step={0.1}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
       </div>
-    </ScrollArea>
+    </div>
   );
 
   return (
