@@ -5,6 +5,7 @@ import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, I
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useThrottledValue } from "@/hooks/useThrottledValue";
 import {
   Select,
   SelectContent,
@@ -347,6 +348,24 @@ export const GradientCanvas = () => {
   // Undo/Redo state
   const [history, setHistory] = useState<CanvasState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Throttled values for canvas rendering (prevents slider drag from being interrupted)
+  const throttledBlur = useThrottledValue(blur, 16);
+  const throttledGradientSpread = useThrottledValue(gradientSpread, 16);
+  const throttledFadeEndpoint = useThrottledValue(fadeEndpoint, 16);
+  const throttledNoiseOpacity = useThrottledValue(noiseOpacity, 16);
+  const throttledNoiseDensity = useThrottledValue(noiseDensity, 16);
+  const throttledNoiseSharpness = useThrottledValue(noiseSharpness, 16);
+  const throttledDitherIntensity = useThrottledValue(ditherIntensity, 16);
+  const throttledImageOpacity = useThrottledValue(imageOpacity, 16);
+  const throttledDitherScale = useThrottledValue(ditherScale, 16);
+  const throttledImageContrast = useThrottledValue(imageContrast, 16);
+  const throttledImageBrightness = useThrottledValue(imageBrightness, 16);
+  const throttledImageMidtones = useThrottledValue(imageMidtones, 16);
+  const throttledImageHighlights = useThrottledValue(imageHighlights, 16);
+  const throttledImageLuminanceThreshold = useThrottledValue(imageLuminanceThreshold, 16);
+  const throttledImageHue = useThrottledValue(imageHue, 16);
+  const throttledImageSaturation = useThrottledValue(imageSaturation, 16);
   
   // Mobile sheet states
   const [leftSheetOpen, setLeftSheetOpen] = useState(false);
@@ -510,8 +529,8 @@ export const GradientCanvas = () => {
 
     for (let i = 0; i < data.length; i += 4) {
       // Use density to control how many pixels get noise
-      if (Math.random() * 100 < noiseDensity) {
-        const noise = Math.random() * 255 * noiseSharpness;
+      if (Math.random() * 100 < throttledNoiseDensity) {
+        const noise = Math.random() * 255 * throttledNoiseSharpness;
         data[i] = noise;     // Red
         data[i + 1] = noise; // Green
         data[i + 2] = noise; // Blue
@@ -525,10 +544,10 @@ export const GradientCanvas = () => {
 
     // Apply to main canvas with opacity
     const previousAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = noiseOpacity / 100;
+    ctx.globalAlpha = throttledNoiseOpacity / 100;
     ctx.drawImage(noiseCanvas, 0, 0);
     ctx.globalAlpha = previousAlpha;
-  }, [noiseDensity, noiseOpacity, noiseSharpness]);
+  }, [throttledNoiseDensity, throttledNoiseOpacity, throttledNoiseSharpness]);
 
   // Advanced image processing
   const applyImageAdjustments = useCallback((imageData: ImageData): ImageData => {
@@ -566,11 +585,11 @@ export const GradientCanvas = () => {
       }
       
       // Apply hue shift
-      h = (h + imageHue / 360) % 1;
+      h = (h + throttledImageHue / 360) % 1;
       if (h < 0) h += 1;
       
       // Apply saturation
-      s = Math.max(0, Math.min(1, s + imageSaturation / 100));
+      s = Math.max(0, Math.min(1, s + throttledImageSaturation / 100));
       
       // Convert back to RGB
       const hue2rgb = (p: number, q: number, t: number) => {
@@ -593,12 +612,12 @@ export const GradientCanvas = () => {
       }
       
       // Apply brightness
-      r = Math.max(0, Math.min(255, r + imageBrightness));
-      g = Math.max(0, Math.min(255, g + imageBrightness));
-      b = Math.max(0, Math.min(255, b + imageBrightness));
+      r = Math.max(0, Math.min(255, r + throttledImageBrightness));
+      g = Math.max(0, Math.min(255, g + throttledImageBrightness));
+      b = Math.max(0, Math.min(255, b + throttledImageBrightness));
       
       // Apply contrast
-      const contrastFactor = (259 * (imageContrast + 255)) / (255 * (259 - imageContrast));
+      const contrastFactor = (259 * (throttledImageContrast + 255)) / (255 * (259 - throttledImageContrast));
       r = Math.max(0, Math.min(255, contrastFactor * (r - 128) + 128));
       g = Math.max(0, Math.min(255, contrastFactor * (g - 128) + 128));
       b = Math.max(0, Math.min(255, contrastFactor * (b - 128) + 128));
@@ -606,15 +625,15 @@ export const GradientCanvas = () => {
       // Apply midtones adjustment (affects mid-range luminosity)
       const luminosity = (r + g + b) / 3;
       if (luminosity > 64 && luminosity < 192) {
-        const midtoneFactor = 1 + (imageMidtones / 100);
+        const midtoneFactor = 1 + (throttledImageMidtones / 100);
         r = Math.max(0, Math.min(255, r * midtoneFactor));
         g = Math.max(0, Math.min(255, g * midtoneFactor));
         b = Math.max(0, Math.min(255, b * midtoneFactor));
       }
       
       // Apply highlights adjustment (affects bright areas)
-      if (luminosity > imageLuminanceThreshold) {
-        const highlightFactor = 1 + (imageHighlights / 100);
+      if (luminosity > throttledImageLuminanceThreshold) {
+        const highlightFactor = 1 + (throttledImageHighlights / 100);
         r = Math.max(0, Math.min(255, r * highlightFactor));
         g = Math.max(0, Math.min(255, g * highlightFactor));
         b = Math.max(0, Math.min(255, b * highlightFactor));
@@ -626,7 +645,7 @@ export const GradientCanvas = () => {
     }
     
     return new ImageData(data, width, height);
-  }, [imageContrast, imageBrightness, imageMidtones, imageHighlights, imageLuminanceThreshold, imageHue, imageSaturation]);
+  }, [throttledImageContrast, throttledImageBrightness, throttledImageMidtones, throttledImageHighlights, throttledImageLuminanceThreshold, throttledImageHue, throttledImageSaturation]);
 
   // Dithering algorithms
   const applyDither = useCallback((imageData: ImageData, mode: DitherMode, threshold: number): ImageData => {
@@ -802,17 +821,17 @@ export const GradientCanvas = () => {
     if (uploadedImage) {
       // Step 1: Draw the gradient first
       ctx.globalCompositeOperation = blendMode;
-      ctx.filter = `blur(${blur}px)`;
+      ctx.filter = `blur(${throttledBlur}px)`;
 
       points.forEach((point) => {
         const x = point.x * canvas.width;
         const y = point.y * canvas.height;
-        const radius = Math.max(canvas.width, canvas.height) * gradientSpread;
+        const radius = Math.max(canvas.width, canvas.height) * throttledGradientSpread;
 
         const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
         gradient.addColorStop(0, point.color);
-        gradient.addColorStop(fadeEndpoint, point.color + "00");
-        if (fadeEndpoint < 1) {
+        gradient.addColorStop(throttledFadeEndpoint, point.color + "00");
+        if (throttledFadeEndpoint < 1) {
           gradient.addColorStop(1, point.color + "00");
         }
 
@@ -843,8 +862,8 @@ export const GradientCanvas = () => {
         
         if (ditherMode !== "none") {
           // Apply dither scale by downsampling, dithering, then upsampling
-          const ditherWidth = Math.max(1, Math.floor(canvas.width / ditherScale));
-          const ditherHeight = Math.max(1, Math.floor(canvas.height / ditherScale));
+          const ditherWidth = Math.max(1, Math.floor(canvas.width / throttledDitherScale));
+          const ditherHeight = Math.max(1, Math.floor(canvas.height / throttledDitherScale));
           
           // Create downsampled canvas
           const downsampleCanvas = document.createElement('canvas');
@@ -858,7 +877,7 @@ export const GradientCanvas = () => {
             
             // Apply dithering to downsampled image
             let downsampledData = downsampleCtx.getImageData(0, 0, ditherWidth, ditherHeight);
-            const dithered = applyDither(downsampledData, ditherMode, ditherIntensity);
+            const dithered = applyDither(downsampledData, ditherMode, throttledDitherIntensity);
             downsampleCtx.putImageData(dithered, 0, 0);
             
             // Upscale back to original size
@@ -883,7 +902,7 @@ export const GradientCanvas = () => {
           
           if (ditherValue < 128) {
             // Black pixel - use gradient color with opacity control
-            const alpha = imageOpacity / 100;
+            const alpha = throttledImageOpacity / 100;
             finalData.data[i] = gradientData.data[i] * alpha + ditherValue * (1 - alpha);
             finalData.data[i + 1] = gradientData.data[i + 1] * alpha + ditherValue * (1 - alpha);
             finalData.data[i + 2] = gradientData.data[i + 2] * alpha + ditherValue * (1 - alpha);
@@ -905,17 +924,17 @@ export const GradientCanvas = () => {
     } else {
       // No image - just draw gradient normally
       ctx.globalCompositeOperation = blendMode;
-      ctx.filter = `blur(${blur}px)`;
+      ctx.filter = `blur(${throttledBlur}px)`;
 
       points.forEach((point) => {
         const x = point.x * canvas.width;
         const y = point.y * canvas.height;
-        const radius = Math.max(canvas.width, canvas.height) * gradientSpread;
+        const radius = Math.max(canvas.width, canvas.height) * throttledGradientSpread;
 
         const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
         gradient.addColorStop(0, point.color);
-        gradient.addColorStop(fadeEndpoint, point.color + "00");
-        if (fadeEndpoint < 1) {
+        gradient.addColorStop(throttledFadeEndpoint, point.color + "00");
+        if (throttledFadeEndpoint < 1) {
           gradient.addColorStop(1, point.color + "00");
         }
 
@@ -931,7 +950,7 @@ export const GradientCanvas = () => {
     if (noiseEnabled) {
       generateNoiseTexture(ctx, canvas.width, canvas.height);
     }
-  }, [points, blur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, gradientSpread, backgroundColor, fadeEndpoint, uploadedImage, ditherMode, ditherIntensity, imageOpacity, ditherScale, ditherInvert, applyDither, applyImageAdjustments]);
+  }, [points, throttledBlur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, throttledGradientSpread, backgroundColor, throttledFadeEndpoint, uploadedImage, ditherMode, throttledDitherIntensity, throttledImageOpacity, throttledDitherScale, ditherInvert, applyDither, applyImageAdjustments, throttledNoiseOpacity, throttledNoiseDensity, throttledNoiseSharpness, throttledImageContrast, throttledImageBrightness, throttledImageMidtones, throttledImageHighlights, throttledImageLuminanceThreshold, throttledImageHue, throttledImageSaturation]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
