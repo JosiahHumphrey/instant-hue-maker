@@ -1,18 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Download, Plus, X, Undo2, Redo2, Palette, Shuffle, Maximize2, Upload, Image as ImageIcon, ZoomIn, ZoomOut, Maximize, Save, FolderOpen, Menu, Settings, Sliders } from "lucide-react";
+import { Download, Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Save, FolderOpen, Menu, Sliders, Palette } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useThrottledValue } from "@/hooks/useThrottledValue";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CanvasRenderer } from "./CanvasRenderer";
+import { LeftSidebarContent, RightSidebarContent } from "./CanvasControls";
 
 interface GradientPoint {
   id: string;
@@ -349,24 +342,6 @@ export const GradientCanvas = () => {
   const [history, setHistory] = useState<CanvasState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // Throttled values for canvas rendering (prevents slider drag from being interrupted)
-  const throttledBlur = useThrottledValue(blur, 16);
-  const throttledGradientSpread = useThrottledValue(gradientSpread, 16);
-  const throttledFadeEndpoint = useThrottledValue(fadeEndpoint, 16);
-  const throttledNoiseOpacity = useThrottledValue(noiseOpacity, 16);
-  const throttledNoiseDensity = useThrottledValue(noiseDensity, 16);
-  const throttledNoiseSharpness = useThrottledValue(noiseSharpness, 16);
-  const throttledDitherIntensity = useThrottledValue(ditherIntensity, 16);
-  const throttledImageOpacity = useThrottledValue(imageOpacity, 16);
-  const throttledDitherScale = useThrottledValue(ditherScale, 16);
-  const throttledImageContrast = useThrottledValue(imageContrast, 16);
-  const throttledImageBrightness = useThrottledValue(imageBrightness, 16);
-  const throttledImageMidtones = useThrottledValue(imageMidtones, 16);
-  const throttledImageHighlights = useThrottledValue(imageHighlights, 16);
-  const throttledImageLuminanceThreshold = useThrottledValue(imageLuminanceThreshold, 16);
-  const throttledImageHue = useThrottledValue(imageHue, 16);
-  const throttledImageSaturation = useThrottledValue(imageSaturation, 16);
-  
   // Mobile sheet states
   const [leftSheetOpen, setLeftSheetOpen] = useState(false);
   const [rightSheetOpen, setRightSheetOpen] = useState(false);
@@ -517,273 +492,8 @@ export const GradientCanvas = () => {
     saveToHistory(initialPoints, 120);
   }, []);
 
-  // Generate noise texture - fixed to use proper canvas compositing
-  const generateNoiseTexture = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    // Create temporary canvas for noise
-    const noiseCanvas = document.createElement('canvas');
-    noiseCanvas.width = width;
-    noiseCanvas.height = height;
-    const noiseCtx = noiseCanvas.getContext('2d')!;
-    const imageData = noiseCtx.createImageData(width, height);
-    const data = imageData.data;
 
-    for (let i = 0; i < data.length; i += 4) {
-      // Use density to control how many pixels get noise
-      if (Math.random() * 100 < throttledNoiseDensity) {
-        const noise = Math.random() * 255 * throttledNoiseSharpness;
-        data[i] = noise;     // Red
-        data[i + 1] = noise; // Green
-        data[i + 2] = noise; // Blue
-        data[i + 3] = 255;   // Full alpha
-      } else {
-        data[i + 3] = 0; // Transparent
-      }
-    }
 
-    noiseCtx.putImageData(imageData, 0, 0);
-
-    // Apply to main canvas with opacity
-    const previousAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = throttledNoiseOpacity / 100;
-    ctx.drawImage(noiseCanvas, 0, 0);
-    ctx.globalAlpha = previousAlpha;
-  }, [throttledNoiseDensity, throttledNoiseOpacity, throttledNoiseSharpness]);
-
-  // Advanced image processing
-  const applyImageAdjustments = useCallback((imageData: ImageData): ImageData => {
-    const data = new Uint8ClampedArray(imageData.data);
-    const width = imageData.width;
-    const height = imageData.height;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      let r = data[i];
-      let g = data[i + 1];
-      let b = data[i + 2];
-      
-      // Convert to HSL for hue and saturation adjustments
-      const max = Math.max(r, g, b) / 255;
-      const min = Math.min(r, g, b) / 255;
-      const l = (max + min) / 2;
-      let h = 0;
-      let s = 0;
-      
-      if (max !== min) {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        
-        switch (max) {
-          case r / 255:
-            h = ((g / 255 - b / 255) / d + (g < b ? 6 : 0)) / 6;
-            break;
-          case g / 255:
-            h = ((b / 255 - r / 255) / d + 2) / 6;
-            break;
-          case b / 255:
-            h = ((r / 255 - g / 255) / d + 4) / 6;
-            break;
-        }
-      }
-      
-      // Apply hue shift
-      h = (h + throttledImageHue / 360) % 1;
-      if (h < 0) h += 1;
-      
-      // Apply saturation
-      s = Math.max(0, Math.min(1, s + throttledImageSaturation / 100));
-      
-      // Convert back to RGB
-      const hue2rgb = (p: number, q: number, t: number) => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      };
-      
-      if (s === 0) {
-        r = g = b = l * 255;
-      } else {
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3) * 255;
-        g = hue2rgb(p, q, h) * 255;
-        b = hue2rgb(p, q, h - 1/3) * 255;
-      }
-      
-      // Apply brightness
-      r = Math.max(0, Math.min(255, r + throttledImageBrightness));
-      g = Math.max(0, Math.min(255, g + throttledImageBrightness));
-      b = Math.max(0, Math.min(255, b + throttledImageBrightness));
-      
-      // Apply contrast
-      const contrastFactor = (259 * (throttledImageContrast + 255)) / (255 * (259 - throttledImageContrast));
-      r = Math.max(0, Math.min(255, contrastFactor * (r - 128) + 128));
-      g = Math.max(0, Math.min(255, contrastFactor * (g - 128) + 128));
-      b = Math.max(0, Math.min(255, contrastFactor * (b - 128) + 128));
-      
-      // Apply midtones adjustment (affects mid-range luminosity)
-      const luminosity = (r + g + b) / 3;
-      if (luminosity > 64 && luminosity < 192) {
-        const midtoneFactor = 1 + (throttledImageMidtones / 100);
-        r = Math.max(0, Math.min(255, r * midtoneFactor));
-        g = Math.max(0, Math.min(255, g * midtoneFactor));
-        b = Math.max(0, Math.min(255, b * midtoneFactor));
-      }
-      
-      // Apply highlights adjustment (affects bright areas)
-      if (luminosity > throttledImageLuminanceThreshold) {
-        const highlightFactor = 1 + (throttledImageHighlights / 100);
-        r = Math.max(0, Math.min(255, r * highlightFactor));
-        g = Math.max(0, Math.min(255, g * highlightFactor));
-        b = Math.max(0, Math.min(255, b * highlightFactor));
-      }
-      
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-    }
-    
-    return new ImageData(data, width, height);
-  }, [throttledImageContrast, throttledImageBrightness, throttledImageMidtones, throttledImageHighlights, throttledImageLuminanceThreshold, throttledImageHue, throttledImageSaturation]);
-
-  // Dithering algorithms
-  const applyDither = useCallback((imageData: ImageData, mode: DitherMode, threshold: number): ImageData => {
-    const data = new Uint8ClampedArray(imageData.data);
-    const width = imageData.width;
-    const height = imageData.height;
-
-    if (mode === "none") {
-      return new ImageData(data, width, height);
-    }
-
-    // Bayer matrices
-    const bayer2x2 = [
-      [0, 2],
-      [3, 1]
-    ];
-
-    const bayer4x4 = [
-      [0, 8, 2, 10],
-      [12, 4, 14, 6],
-      [3, 11, 1, 9],
-      [15, 7, 13, 5]
-    ];
-
-    const bayer8x8 = [
-      [0, 32, 8, 40, 2, 34, 10, 42],
-      [48, 16, 56, 24, 50, 18, 58, 26],
-      [12, 44, 4, 36, 14, 46, 6, 38],
-      [60, 28, 52, 20, 62, 30, 54, 22],
-      [3, 35, 11, 43, 1, 33, 9, 41],
-      [51, 19, 59, 27, 49, 17, 57, 25],
-      [15, 47, 7, 39, 13, 45, 5, 37],
-      [63, 31, 55, 23, 61, 29, 53, 21]
-    ];
-
-    const getPixelIndex = (x: number, y: number) => (y * width + x) * 4;
-
-    if (mode === "floyd-steinberg") {
-      // Floyd-Steinberg dithering
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = getPixelIndex(x, y);
-          
-          // Convert to grayscale
-          const oldPixel = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-          const newPixel = oldPixel < threshold ? 0 : 255;
-          const error = oldPixel - newPixel;
-
-          data[idx] = data[idx + 1] = data[idx + 2] = newPixel;
-
-          // Distribute error to neighboring pixels
-          if (x + 1 < width) {
-            const rightIdx = getPixelIndex(x + 1, y);
-            data[rightIdx] = Math.min(255, Math.max(0, data[rightIdx] + error * 7 / 16));
-            data[rightIdx + 1] = Math.min(255, Math.max(0, data[rightIdx + 1] + error * 7 / 16));
-            data[rightIdx + 2] = Math.min(255, Math.max(0, data[rightIdx + 2] + error * 7 / 16));
-          }
-          if (x - 1 >= 0 && y + 1 < height) {
-            const bottomLeftIdx = getPixelIndex(x - 1, y + 1);
-            data[bottomLeftIdx] = Math.min(255, Math.max(0, data[bottomLeftIdx] + error * 3 / 16));
-            data[bottomLeftIdx + 1] = Math.min(255, Math.max(0, data[bottomLeftIdx + 1] + error * 3 / 16));
-            data[bottomLeftIdx + 2] = Math.min(255, Math.max(0, data[bottomLeftIdx + 2] + error * 3 / 16));
-          }
-          if (y + 1 < height) {
-            const bottomIdx = getPixelIndex(x, y + 1);
-            data[bottomIdx] = Math.min(255, Math.max(0, data[bottomIdx] + error * 5 / 16));
-            data[bottomIdx + 1] = Math.min(255, Math.max(0, data[bottomIdx + 1] + error * 5 / 16));
-            data[bottomIdx + 2] = Math.min(255, Math.max(0, data[bottomIdx + 2] + error * 5 / 16));
-          }
-          if (x + 1 < width && y + 1 < height) {
-            const bottomRightIdx = getPixelIndex(x + 1, y + 1);
-            data[bottomRightIdx] = Math.min(255, Math.max(0, data[bottomRightIdx] + error * 1 / 16));
-            data[bottomRightIdx + 1] = Math.min(255, Math.max(0, data[bottomRightIdx + 1] + error * 1 / 16));
-            data[bottomRightIdx + 2] = Math.min(255, Math.max(0, data[bottomRightIdx + 2] + error * 1 / 16));
-          }
-        }
-      }
-    } else if (mode === "atkinson") {
-      // Atkinson dithering (similar to Floyd-Steinberg but different error distribution)
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = getPixelIndex(x, y);
-          const oldPixel = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-          const newPixel = oldPixel < threshold ? 0 : 255;
-          const error = (oldPixel - newPixel) / 8;
-
-          data[idx] = data[idx + 1] = data[idx + 2] = newPixel;
-
-          // Atkinson error distribution
-          const distribute = (dx: number, dy: number) => {
-            if (x + dx >= 0 && x + dx < width && y + dy >= 0 && y + dy < height) {
-              const targetIdx = getPixelIndex(x + dx, y + dy);
-              data[targetIdx] = Math.min(255, Math.max(0, data[targetIdx] + error));
-              data[targetIdx + 1] = Math.min(255, Math.max(0, data[targetIdx + 1] + error));
-              data[targetIdx + 2] = Math.min(255, Math.max(0, data[targetIdx + 2] + error));
-            }
-          };
-
-          distribute(1, 0);
-          distribute(2, 0);
-          distribute(-1, 1);
-          distribute(0, 1);
-          distribute(1, 1);
-          distribute(0, 2);
-        }
-      }
-    } else {
-      // Bayer matrix dithering
-      let matrix = bayer2x2;
-      let matrixSize = 2;
-      let divisor = 4;
-
-      if (mode === "bayer-4x4") {
-        matrix = bayer4x4;
-        matrixSize = 4;
-        divisor = 16;
-      } else if (mode === "bayer-8x8") {
-        matrix = bayer8x8;
-        matrixSize = 8;
-        divisor = 64;
-      }
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = getPixelIndex(x, y);
-          const grayscale = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-          
-          const bayerValue = matrix[y % matrixSize][x % matrixSize];
-          const adjustedThreshold = threshold + (bayerValue / divisor - 0.5) * 255;
-          
-          const newValue = grayscale < adjustedThreshold ? 0 : 255;
-          data[idx] = data[idx + 1] = data[idx + 2] = newValue;
-        }
-      }
-    }
-
-    return new ImageData(data, width, height);
-  }, []);
 
   // Handle image upload
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -802,155 +512,6 @@ export const GradientCanvas = () => {
     reader.readAsDataURL(file);
   }, []);
 
-  // Draw gradient on canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-
-    canvas.width = canvasSize.width;
-    canvas.height = canvasSize.height;
-
-    // Clear canvas with background color
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // If we have an uploaded image, use it as a mask for the gradient
-    if (uploadedImage) {
-      // Step 1: Draw the gradient first
-      ctx.globalCompositeOperation = blendMode;
-      ctx.filter = `blur(${throttledBlur}px)`;
-
-      points.forEach((point) => {
-        const x = point.x * canvas.width;
-        const y = point.y * canvas.height;
-        const radius = Math.max(canvas.width, canvas.height) * throttledGradientSpread;
-
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        gradient.addColorStop(0, point.color);
-        gradient.addColorStop(throttledFadeEndpoint, point.color + "00");
-        if (throttledFadeEndpoint < 1) {
-          gradient.addColorStop(1, point.color + "00");
-        }
-
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      });
-
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-
-      // Step 2: Get the gradient we just drew
-      const gradientData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      // Step 3: Process the dithered image
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      if (tempCtx) {
-        // Draw the image at full size
-        tempCtx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
-        
-        // Apply image adjustments before dithering
-        let imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-        imageData = applyImageAdjustments(imageData);
-        tempCtx.putImageData(imageData, 0, 0);
-        
-        if (ditherMode !== "none") {
-          // Apply dither scale by downsampling, dithering, then upsampling
-          const ditherWidth = Math.max(1, Math.floor(canvas.width / throttledDitherScale));
-          const ditherHeight = Math.max(1, Math.floor(canvas.height / throttledDitherScale));
-          
-          // Create downsampled canvas
-          const downsampleCanvas = document.createElement('canvas');
-          downsampleCanvas.width = ditherWidth;
-          downsampleCanvas.height = ditherHeight;
-          const downsampleCtx = downsampleCanvas.getContext('2d');
-          
-          if (downsampleCtx) {
-            // Downsample the image
-            downsampleCtx.drawImage(tempCanvas, 0, 0, ditherWidth, ditherHeight);
-            
-            // Apply dithering to downsampled image
-            let downsampledData = downsampleCtx.getImageData(0, 0, ditherWidth, ditherHeight);
-            const dithered = applyDither(downsampledData, ditherMode, throttledDitherIntensity);
-            downsampleCtx.putImageData(dithered, 0, 0);
-            
-            // Upscale back to original size
-            tempCtx.imageSmoothingEnabled = false;
-            tempCtx.clearRect(0, 0, canvas.width, canvas.height);
-            tempCtx.drawImage(downsampleCanvas, 0, 0, canvas.width, canvas.height);
-          }
-        }
-        
-        const ditherData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Step 4: Combine - blacks get gradient color, whites stay white (with optional invert)
-        const finalData = ctx.createImageData(canvas.width, canvas.height);
-        
-        for (let i = 0; i < ditherData.data.length; i += 4) {
-          let ditherValue = ditherData.data[i]; // Grayscale, so R = G = B
-          
-          // Apply invert if enabled
-          if (ditherInvert) {
-            ditherValue = 255 - ditherValue;
-          }
-          
-          if (ditherValue < 128) {
-            // Black pixel - use gradient color with opacity control
-            const alpha = throttledImageOpacity / 100;
-            finalData.data[i] = gradientData.data[i] * alpha + ditherValue * (1 - alpha);
-            finalData.data[i + 1] = gradientData.data[i + 1] * alpha + ditherValue * (1 - alpha);
-            finalData.data[i + 2] = gradientData.data[i + 2] * alpha + ditherValue * (1 - alpha);
-            finalData.data[i + 3] = 255;
-          } else {
-            // White pixel - keep it pure white
-            finalData.data[i] = 255;
-            finalData.data[i + 1] = 255;
-            finalData.data[i + 2] = 255;
-            finalData.data[i + 3] = 255;
-          }
-        }
-        
-        // Clear and draw final result
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.putImageData(finalData, 0, 0);
-      }
-    } else {
-      // No image - just draw gradient normally
-      ctx.globalCompositeOperation = blendMode;
-      ctx.filter = `blur(${throttledBlur}px)`;
-
-      points.forEach((point) => {
-        const x = point.x * canvas.width;
-        const y = point.y * canvas.height;
-        const radius = Math.max(canvas.width, canvas.height) * throttledGradientSpread;
-
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        gradient.addColorStop(0, point.color);
-        gradient.addColorStop(throttledFadeEndpoint, point.color + "00");
-        if (throttledFadeEndpoint < 1) {
-          gradient.addColorStop(1, point.color + "00");
-        }
-
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      });
-
-      ctx.filter = "none";
-      ctx.globalCompositeOperation = "source-over";
-    }
-
-    // Add noise texture
-    if (noiseEnabled) {
-      generateNoiseTexture(ctx, canvas.width, canvas.height);
-    }
-  }, [points, throttledBlur, canvasSize, noiseEnabled, generateNoiseTexture, blendMode, throttledGradientSpread, backgroundColor, throttledFadeEndpoint, uploadedImage, ditherMode, throttledDitherIntensity, throttledImageOpacity, throttledDitherScale, ditherInvert, applyDither, applyImageAdjustments, throttledNoiseOpacity, throttledNoiseDensity, throttledNoiseSharpness, throttledImageContrast, throttledImageBrightness, throttledImageMidtones, throttledImageHighlights, throttledImageLuminanceThreshold, throttledImageHue, throttledImageSaturation]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDragging) return;
@@ -1263,614 +824,7 @@ export const GradientCanvas = () => {
     }
   };
 
-  // Sidebar content components for reuse
-  const LeftSidebarContent = () => (
-    <div className="p-4 space-y-6">
-      {/* Saved Presets */}
-      {savedPresets.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-            Saved Presets
-          </h2>
-          <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-            {savedPresets.map((preset, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 p-2 rounded-lg border border-border hover:border-primary/50 group"
-              >
-                <Button
-                  variant="ghost"
-                  className="flex-1 justify-start text-xs"
-                  onClick={() => {
-                    loadPreset(preset);
-                    if (isMobile) setLeftSheetOpen(false);
-                  }}
-                >
-                  {preset.name}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                  onClick={() => exportPresetToFile(preset)}
-                  title="Export to file"
-                >
-                  <Download className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => deletePreset(index)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Color Palette */}
-      <div>
-        <label className="text-sm font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
-          <Palette className="h-4 w-4" />
-          Color Palette
-        </label>
-        <Select onValueChange={applyPalette}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Choose preset..." />
-          </SelectTrigger>
-          <SelectContent className="max-h-80 bg-popover">
-            {Object.keys(COLOR_PALETTES).map((paletteName) => (
-              <SelectItem key={paletteName} value={paletteName}>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-0.5">
-                    {COLOR_PALETTES[paletteName as keyof typeof COLOR_PALETTES]
-                      .slice(0, 5)
-                      .map((color, i) => (
-                        <div
-                          key={i}
-                          className="w-3 h-3 rounded-sm"
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                  </div>
-                  {paletteName}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Gradient Layers */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Gradient Layers
-          </h2>
-          <Button
-            onClick={randomizePositions}
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title="Randomize positions"
-          >
-            <Shuffle className="h-3 w-3" />
-          </Button>
-        </div>
-        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
-          {points.map((point) => (
-            <div
-              key={point.id}
-              className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer ${
-                selectedPoint === point.id
-                  ? "border-primary bg-primary/10"
-                  : "border-border hover:border-primary/50"
-              }`}
-              onClick={() => setSelectedPoint(point.id)}
-            >
-              <input
-                type="color"
-                value={point.color}
-                onChange={(e) => updatePointColor(point.id, e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer border-0"
-              />
-              <div className="flex-1 text-xs font-mono">{point.color}</div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removePoint(point.id);
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-        <Button
-          onClick={addPoint}
-          variant="outline"
-          className="w-full mt-3"
-          disabled={points.length >= 10}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Layer
-        </Button>
-      </div>
-
-      {/* Image & Dither */}
-      <div className="pt-4 border-t border-border">
-        <div className="flex items-center gap-2 mb-3">
-          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-muted-foreground">Image & Dither</h3>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground block mb-2">
-            Upload Image
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-              id="image-upload"
-            />
-            <label htmlFor="image-upload" className="flex-1">
-              <Button variant="outline" className="w-full" asChild>
-                <span>
-                  <Upload className="h-4 w-4 mr-2" />
-                  {uploadedImage ? "Change" : "Upload"}
-                </span>
-              </Button>
-            </label>
-            {uploadedImage && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setUploadedImage(null);
-                  toast.success("Image removed");
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {uploadedImage && (
-          <div className="space-y-3 mt-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-2">
-                Dither Effect
-              </label>
-              <Select value={ditherMode} onValueChange={(value) => setDitherMode(value as DitherMode)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="floyd-steinberg">Floyd-Steinberg</SelectItem>
-                  <SelectItem value="atkinson">Atkinson</SelectItem>
-                  <SelectItem value="bayer-2x2">Bayer 2×2</SelectItem>
-                  <SelectItem value="bayer-4x4">Bayer 4×4</SelectItem>
-                  <SelectItem value="bayer-8x8">Bayer 8×8</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {ditherMode !== "none" && (
-              <>
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-2">
-                    Threshold: {ditherIntensity}
-                  </label>
-                  <Slider
-                    value={[ditherIntensity]}
-                    onValueChange={(v) => setDitherIntensity(v[0])}
-                    min={0}
-                    max={255}
-                    step={1}
-                    className="w-full"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-2">
-                    Pattern Resolution: {ditherScale.toFixed(2)}x
-                  </label>
-                  <Slider
-                    value={[ditherScale]}
-                    onValueChange={(v) => setDitherScale(v[0])}
-                    min={0.5}
-                    max={8.0}
-                    step={0.1}
-                    className="w-full"
-                  />
-                </div>
-
-                 <div className="flex items-center justify-between">
-                   <label className="text-xs text-muted-foreground">
-                     Invert Colors
-                   </label>
-                   <Button
-                     variant={ditherInvert ? "default" : "outline"}
-                     size="sm"
-                     onClick={() => setDitherInvert(!ditherInvert)}
-                     className="h-7 px-3 text-xs"
-                   >
-                     {ditherInvert ? "On" : "Off"}
-                   </Button>
-                 </div>
-               </>
-             )}
-
-             <div className="space-y-3 pt-3 border-t">
-               <div className="text-xs font-medium text-muted-foreground">
-                 Image Adjustments
-               </div>
-               
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Contrast: {imageContrast}
-                 </label>
-                 <Slider
-                   value={[imageContrast]}
-                   onValueChange={(v) => setImageContrast(v[0])}
-                   min={-100}
-                   max={100}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Brightness: {imageBrightness}
-                 </label>
-                 <Slider
-                   value={[imageBrightness]}
-                   onValueChange={(v) => setImageBrightness(v[0])}
-                   min={-100}
-                   max={100}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Midtones: {imageMidtones}
-                 </label>
-                 <Slider
-                   value={[imageMidtones]}
-                   onValueChange={(v) => setImageMidtones(v[0])}
-                   min={-100}
-                   max={100}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Highlights: {imageHighlights}
-                 </label>
-                 <Slider
-                   value={[imageHighlights]}
-                   onValueChange={(v) => setImageHighlights(v[0])}
-                   min={-100}
-                   max={100}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Luminance Threshold: {imageLuminanceThreshold}
-                 </label>
-                 <Slider
-                   value={[imageLuminanceThreshold]}
-                   onValueChange={(v) => setImageLuminanceThreshold(v[0])}
-                   min={0}
-                   max={255}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Hue: {imageHue}°
-                 </label>
-                 <Slider
-                   value={[imageHue]}
-                   onValueChange={(v) => setImageHue(v[0])}
-                   min={-180}
-                   max={180}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-
-               <div>
-                 <label className="text-xs text-muted-foreground block mb-2">
-                   Saturation: {imageSaturation}
-                 </label>
-                 <Slider
-                   value={[imageSaturation]}
-                   onValueChange={(v) => setImageSaturation(v[0])}
-                   min={-100}
-                   max={100}
-                   step={1}
-                   className="w-full"
-                 />
-               </div>
-             </div>
-
-             <div>
-               <label className="text-xs text-muted-foreground block mb-2">
-                 Opacity: {imageOpacity}%
-               </label>
-               <Slider
-                 value={[imageOpacity]}
-                 onValueChange={(v) => setImageOpacity(v[0])}
-                 min={0}
-                 max={100}
-                 step={1}
-                 className="w-full"
-               />
-             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const RightSidebarContent = () => (
-    <div className="p-4 space-y-6">
-      {/* Canvas Size */}
-      <div>
-        <h2 className="text-sm font-semibold mb-3 text-muted-foreground">
-          Canvas Size
-        </h2>
-        <div className="grid grid-cols-3 gap-2">
-          {CANVAS_PRESETS.map((preset) => (
-            <Button
-              key={preset.name}
-              variant={canvasSize.name === preset.name ? "default" : "outline"}
-              onClick={() => setCanvasSize(preset)}
-              className="font-mono text-xs"
-              size="sm"
-            >
-              {preset.name}
-            </Button>
-          ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-muted-foreground">Width</label>
-            <input
-              type="number"
-              value={canvasSize.width}
-              onChange={(e) =>
-                setCanvasSize({
-                  ...canvasSize,
-                  width: parseInt(e.target.value) || 1,
-                })
-              }
-              className="w-full bg-input border border-border rounded px-2 py-1.5 text-sm mt-1"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Height</label>
-            <input
-              type="number"
-              value={canvasSize.height}
-              onChange={(e) =>
-                setCanvasSize({
-                  ...canvasSize,
-                  height: parseInt(e.target.value) || 1,
-                })
-              }
-              className="w-full bg-input border border-border rounded px-2 py-1.5 text-sm mt-1"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Effects */}
-      <div className="pt-4 border-t border-border">
-        <h2 className="text-sm font-semibold mb-3 text-muted-foreground">Effects</h2>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Blur: {blur}px
-            </label>
-            <Slider
-              value={[blur]}
-              onValueChange={(v) => updateBlur(v[0])}
-              min={0}
-              max={300}
-              step={1}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Blend Mode
-            </label>
-            <Select value={blendMode} onValueChange={(value) => setBlendMode(value as GlobalCompositeOperation)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover">
-                {BLEND_MODES.map((mode) => (
-                  <SelectItem key={mode} value={mode}>
-                    {BLEND_MODE_LABELS[mode]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Edge Control */}
-      <div className="pt-4 border-t border-border">
-        <div className="flex items-center gap-2 mb-3">
-          <Maximize2 className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-muted-foreground">Edge Control</h3>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Presets
-            </label>
-            <Select onValueChange={applyEdgePreset}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choose preset..." />
-              </SelectTrigger>
-              <SelectContent className="bg-popover">
-                {Object.keys(EDGE_PRESETS).map((presetName) => (
-                  <SelectItem key={presetName} value={presetName}>
-                    {presetName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Spread: {gradientSpread.toFixed(1)}
-            </label>
-            <Slider
-              value={[gradientSpread]}
-              onValueChange={(v) => updateGradientSpread(v[0])}
-              min={0.3}
-              max={1.5}
-              step={0.1}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Background
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="color"
-                value={backgroundColor}
-                onChange={(e) => updateBackgroundColor(e.target.value)}
-                className="w-12 h-9 rounded cursor-pointer border border-border"
-              />
-              <div className="flex-1 grid grid-cols-4 gap-1">
-                {["#ffffff", "#000000", "#f5f5f5", "#1a1a1a"].map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => updateBackgroundColor(color)}
-                    className="h-9 rounded border-2 transition-all hover:scale-105"
-                    style={{
-                      backgroundColor: color,
-                      borderColor: backgroundColor === color ? "hsl(var(--primary))" : "hsl(var(--border))"
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground block mb-2">
-              Fade: {fadeEndpoint.toFixed(2)}
-            </label>
-            <Slider
-              value={[fadeEndpoint]}
-              onValueChange={(v) => updateFadeEndpoint(v[0])}
-              min={0.3}
-              max={1.0}
-              step={0.05}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Noise Texture */}
-      <div className="pt-4 border-t border-border">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground">Noise Texture</h3>
-          <Button
-            variant={noiseEnabled ? "default" : "outline"}
-            size="sm"
-            onClick={() => setNoiseEnabled(!noiseEnabled)}
-            className="h-7 px-3 text-xs"
-          >
-            {noiseEnabled ? "On" : "Off"}
-          </Button>
-        </div>
-
-        {noiseEnabled && (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-2">
-                Opacity: {noiseOpacity}%
-              </label>
-              <Slider
-                value={[noiseOpacity]}
-                onValueChange={(v) => setNoiseOpacity(v[0])}
-                min={0}
-                max={100}
-                step={1}
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground block mb-2">
-                Density: {noiseDensity}
-              </label>
-              <Slider
-                value={[noiseDensity]}
-                onValueChange={(v) => setNoiseDensity(v[0])}
-                min={1}
-                max={100}
-                step={1}
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground block mb-2">
-                Sharpness: {noiseSharpness.toFixed(1)}
-              </label>
-              <Slider
-                value={[noiseSharpness]}
-                onValueChange={(v) => setNoiseSharpness(v[0])}
-                min={0.1}
-                max={5}
-                step={0.1}
-                className="w-full"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -1954,7 +908,7 @@ export const GradientCanvas = () => {
               <Sheet open={rightSheetOpen} onOpenChange={setRightSheetOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon">
-                    <Sliders className="h-5 w-5" />
+                <Sliders className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-80 overflow-y-auto">
@@ -1993,7 +947,48 @@ export const GradientCanvas = () => {
         {!isMobile && !isTablet && (
           <div className="w-72 bg-card border-r border-border flex flex-col">
             <div className="flex-1 overflow-y-auto">
-              <LeftSidebarContent />
+              <LeftSidebarContent
+                savedPresets={savedPresets}
+                points={points}
+                selectedPoint={selectedPoint}
+                uploadedImage={uploadedImage}
+                ditherMode={ditherMode}
+                ditherIntensity={ditherIntensity}
+                ditherScale={ditherScale}
+                ditherInvert={ditherInvert}
+                imageOpacity={imageOpacity}
+                imageContrast={imageContrast}
+                imageBrightness={imageBrightness}
+                imageMidtones={imageMidtones}
+                imageHighlights={imageHighlights}
+                imageLuminanceThreshold={imageLuminanceThreshold}
+                imageHue={imageHue}
+                imageSaturation={imageSaturation}
+                colorPalettes={COLOR_PALETTES}
+                onLoadPreset={loadPreset}
+                onExportPreset={exportPresetToFile}
+                onDeletePreset={deletePreset}
+                onApplyPalette={applyPalette}
+                onRandomizePositions={randomizePositions}
+                onSetSelectedPoint={setSelectedPoint}
+                onUpdatePointColor={updatePointColor}
+                onRemovePoint={removePoint}
+                onAddPoint={addPoint}
+                onImageUpload={handleImageUpload}
+                onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
+                onSetDitherMode={setDitherMode}
+                onSetDitherIntensity={setDitherIntensity}
+                onSetDitherScale={setDitherScale}
+                onSetDitherInvert={setDitherInvert}
+                onSetImageOpacity={setImageOpacity}
+                onSetImageContrast={setImageContrast}
+                onSetImageBrightness={setImageBrightness}
+                onSetImageMidtones={setImageMidtones}
+                onSetImageHighlights={setImageHighlights}
+                onSetImageLuminanceThreshold={setImageLuminanceThreshold}
+                onSetImageHue={setImageHue}
+                onSetImageSaturation={setImageSaturation}
+              />
             </div>
           </div>
         )}
@@ -2014,21 +1009,92 @@ export const GradientCanvas = () => {
               <SheetHeader>
                 <SheetTitle>Colors & Layers</SheetTitle>
               </SheetHeader>
-              <LeftSidebarContent />
-            </SheetContent>
-          </Sheet>
-        )}
+                <LeftSidebarContent
+                  savedPresets={savedPresets}
+                  points={points}
+                  selectedPoint={selectedPoint}
+                  uploadedImage={uploadedImage}
+                  ditherMode={ditherMode}
+                  ditherIntensity={ditherIntensity}
+                  ditherScale={ditherScale}
+                  ditherInvert={ditherInvert}
+                  imageOpacity={imageOpacity}
+                  imageContrast={imageContrast}
+                  imageBrightness={imageBrightness}
+                  imageMidtones={imageMidtones}
+                  imageHighlights={imageHighlights}
+                  imageLuminanceThreshold={imageLuminanceThreshold}
+                  imageHue={imageHue}
+                  imageSaturation={imageSaturation}
+                  colorPalettes={COLOR_PALETTES}
+                  onLoadPreset={loadPreset}
+                  onExportPreset={exportPresetToFile}
+                  onDeletePreset={deletePreset}
+                  onApplyPalette={applyPalette}
+                  onRandomizePositions={randomizePositions}
+                  onSetSelectedPoint={setSelectedPoint}
+                  onUpdatePointColor={updatePointColor}
+                  onRemovePoint={removePoint}
+                  onAddPoint={addPoint}
+                  onImageUpload={handleImageUpload}
+                  onRemoveImage={() => { setUploadedImage(null); toast.success("Image removed"); }}
+                  onSetDitherMode={setDitherMode}
+                  onSetDitherIntensity={setDitherIntensity}
+                  onSetDitherScale={setDitherScale}
+                  onSetDitherInvert={setDitherInvert}
+                  onSetImageOpacity={setImageOpacity}
+                  onSetImageContrast={setImageContrast}
+                  onSetImageBrightness={setImageBrightness}
+                  onSetImageMidtones={setImageMidtones}
+                  onSetImageHighlights={setImageHighlights}
+                  onSetImageLuminanceThreshold={setImageLuminanceThreshold}
+                  onSetImageHue={setImageHue}
+                  onSetImageSaturation={setImageSaturation}
+                  isMobile={isMobile}
+                  onCloseSheet={() => setLeftSheetOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
+          )}
 
-        {/* Center Canvas */}
-        <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2 md:p-4 lg:p-8">
-          <div 
-            className="relative" 
-            style={{ 
-              transform: isMobile ? 'scale(1)' : `scale(${zoom / 100})`, 
-              transformOrigin: 'center' 
-            }}
-          >
-            <canvas
+          {/* Center Canvas */}
+          <div className="flex-1 flex items-center justify-center bg-muted/30 overflow-hidden p-2 md:p-4 lg:p-8">
+            <div 
+              className="relative" 
+              style={{ 
+                transform: isMobile ? 'scale(1)' : `scale(${zoom / 100})`, 
+                transformOrigin: 'center' 
+              }}
+            >
+              <CanvasRenderer
+                ref={canvasRef}
+                points={points}
+                blur={blur}
+                canvasWidth={canvasSize.width}
+                canvasHeight={canvasSize.height}
+                backgroundColor={backgroundColor}
+                gradientSpread={gradientSpread}
+                fadeEndpoint={fadeEndpoint}
+                blendMode={blendMode}
+                noiseEnabled={noiseEnabled}
+                noiseOpacity={noiseOpacity}
+                noiseDensity={noiseDensity}
+                noiseSharpness={noiseSharpness}
+                uploadedImage={uploadedImage}
+                ditherMode={ditherMode}
+                ditherIntensity={ditherIntensity}
+                imageOpacity={imageOpacity}
+                ditherScale={ditherScale}
+                ditherInvert={ditherInvert}
+                imageContrast={imageContrast}
+                imageBrightness={imageBrightness}
+                imageMidtones={imageMidtones}
+                imageHighlights={imageHighlights}
+                imageLuminanceThreshold={imageLuminanceThreshold}
+                imageHue={imageHue}
+                imageSaturation={imageSaturation}
+              />
+              <div
               ref={canvasRef}
               onClick={handleCanvasClick}
               onMouseDown={handleMouseDown}
@@ -2077,7 +1143,33 @@ export const GradientCanvas = () => {
         {!isMobile && !isTablet && (
           <div className="w-72 bg-card border-l border-border flex flex-col">
             <div className="flex-1 overflow-y-auto">
-              <RightSidebarContent />
+              <RightSidebarContent
+                canvasSize={canvasSize}
+                canvasPresets={CANVAS_PRESETS}
+                blur={blur}
+                blendMode={blendMode}
+                blendModes={BLEND_MODES}
+                blendModeLabels={BLEND_MODE_LABELS}
+                gradientSpread={gradientSpread}
+                backgroundColor={backgroundColor}
+                fadeEndpoint={fadeEndpoint}
+                edgePresets={EDGE_PRESETS}
+                noiseEnabled={noiseEnabled}
+                noiseOpacity={noiseOpacity}
+                noiseDensity={noiseDensity}
+                noiseSharpness={noiseSharpness}
+                onSetCanvasSize={setCanvasSize}
+                onUpdateBlur={updateBlur}
+                onSetBlendMode={setBlendMode}
+                onUpdateGradientSpread={updateGradientSpread}
+                onUpdateBackgroundColor={updateBackgroundColor}
+                onUpdateFadeEndpoint={updateFadeEndpoint}
+                onApplyEdgePreset={applyEdgePreset}
+                onSetNoiseEnabled={setNoiseEnabled}
+                onSetNoiseOpacity={setNoiseOpacity}
+                onSetNoiseDensity={setNoiseDensity}
+                onSetNoiseSharpness={setNoiseSharpness}
+              />
             </div>
           </div>
         )}
@@ -2091,7 +1183,7 @@ export const GradientCanvas = () => {
                 size="icon" 
                 className="absolute right-4 top-20 z-10 bg-card border border-border shadow-lg"
               >
-                <Settings className="h-5 w-5" />
+                <Sliders className="h-5 w-5" />
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-80 overflow-y-auto">
